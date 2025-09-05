@@ -10,6 +10,9 @@ const { initializeFirebase } = require('./config/firebase');
 const jobRoutes = require('./routes/jobRoutes');
 const userRoutes = require('./routes/userRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
+const progressRoutes = require('./routes/progressRoutes');
+const roadmapRoutes = require('./routes/roadmapRoutes');
+const roadmapProgressRoutes = require('./routes/roadmapProgressRoutes');
 const { startJobSync } = require('./services/jobSyncService');
 
 const app = express();
@@ -44,6 +47,9 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/jobs', jobRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/resume', resumeRoutes);
+app.use('/api/progress', progressRoutes);
+app.use('/api/roadmap', roadmapRoutes);
+app.use('/api/roadmap-progress', roadmapProgressRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({
