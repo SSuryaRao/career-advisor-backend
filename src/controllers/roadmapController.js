@@ -24,6 +24,274 @@ const roadmapController = {
   }
 };
 
+// ROI calculation helper function
+function calculateROI(domain, skillLevel, timeInWeeks) {
+  const roiData = {
+    'web-development': {
+      beginner: {
+        averageCourseFees: 25000,
+        expectedSalaryMin: 400000,
+        expectedSalaryMax: 800000,
+        currentMarketDemand: "High",
+        jobGrowthRate: "22%",
+        avgTimeToJob: 4,
+        skills: ['HTML/CSS', 'JavaScript', 'React', 'Node.js']
+      },
+      intermediate: {
+        averageCourseFees: 35000,
+        expectedSalaryMin: 600000,
+        expectedSalaryMax: 1200000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "25%",
+        avgTimeToJob: 3,
+        skills: ['Advanced React', 'State Management', 'APIs', 'Testing']
+      },
+      advanced: {
+        averageCourseFees: 45000,
+        expectedSalaryMin: 1000000,
+        expectedSalaryMax: 2000000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "28%",
+        avgTimeToJob: 2,
+        skills: ['System Design', 'Microservices', 'Cloud Architecture']
+      }
+    },
+    'data-science': {
+      beginner: {
+        averageCourseFees: 40000,
+        expectedSalaryMin: 600000,
+        expectedSalaryMax: 1200000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "31%",
+        avgTimeToJob: 5,
+        skills: ['Python', 'Statistics', 'Pandas', 'Machine Learning']
+      },
+      intermediate: {
+        averageCourseFees: 55000,
+        expectedSalaryMin: 800000,
+        expectedSalaryMax: 1600000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "35%",
+        avgTimeToJob: 3,
+        skills: ['Advanced ML', 'Deep Learning', 'MLOps', 'Feature Engineering']
+      },
+      advanced: {
+        averageCourseFees: 70000,
+        expectedSalaryMin: 1200000,
+        expectedSalaryMax: 2500000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "38%",
+        avgTimeToJob: 2,
+        skills: ['Research', 'Advanced Analytics', 'AI Systems', 'Leadership']
+      }
+    },
+    'mobile-development': {
+      beginner: {
+        averageCourseFees: 30000,
+        expectedSalaryMin: 500000,
+        expectedSalaryMax: 1000000,
+        currentMarketDemand: "High",
+        jobGrowthRate: "24%",
+        avgTimeToJob: 4,
+        skills: ['Flutter/React Native', 'Mobile UI/UX', 'APIs', 'App Store']
+      },
+      intermediate: {
+        averageCourseFees: 40000,
+        expectedSalaryMin: 700000,
+        expectedSalaryMax: 1400000,
+        currentMarketDemand: "High",
+        jobGrowthRate: "26%",
+        avgTimeToJob: 3,
+        skills: ['Native Development', 'Performance', 'Advanced Features']
+      },
+      advanced: {
+        averageCourseFees: 50000,
+        expectedSalaryMin: 1000000,
+        expectedSalaryMax: 2000000,
+        currentMarketDemand: "High",
+        jobGrowthRate: "28%",
+        avgTimeToJob: 2,
+        skills: ['Architecture', 'Team Leadership', 'Cross-platform']
+      }
+    },
+    'cybersecurity': {
+      beginner: {
+        averageCourseFees: 45000,
+        expectedSalaryMin: 700000,
+        expectedSalaryMax: 1300000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "33%",
+        avgTimeToJob: 5,
+        skills: ['Network Security', 'Ethical Hacking', 'Risk Assessment']
+      },
+      intermediate: {
+        averageCourseFees: 60000,
+        expectedSalaryMin: 900000,
+        expectedSalaryMax: 1800000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "35%",
+        avgTimeToJob: 3,
+        skills: ['Advanced Security', 'Incident Response', 'Compliance']
+      },
+      advanced: {
+        averageCourseFees: 75000,
+        expectedSalaryMin: 1300000,
+        expectedSalaryMax: 2800000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "38%",
+        avgTimeToJob: 2,
+        skills: ['Security Architecture', 'Leadership', 'Strategy']
+      }
+    },
+    'cloud-computing': {
+      beginner: {
+        averageCourseFees: 35000,
+        expectedSalaryMin: 600000,
+        expectedSalaryMax: 1200000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "30%",
+        avgTimeToJob: 4,
+        skills: ['AWS/Azure', 'Linux', 'Containers', 'Infrastructure']
+      },
+      intermediate: {
+        averageCourseFees: 50000,
+        expectedSalaryMin: 800000,
+        expectedSalaryMax: 1600000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "32%",
+        avgTimeToJob: 3,
+        skills: ['Advanced Cloud', 'Kubernetes', 'DevOps', 'Architecture']
+      },
+      advanced: {
+        averageCourseFees: 65000,
+        expectedSalaryMin: 1200000,
+        expectedSalaryMax: 2400000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "35%",
+        avgTimeToJob: 2,
+        skills: ['Cloud Strategy', 'Multi-cloud', 'Team Leadership']
+      }
+    },
+    'artificial-intelligence': {
+      beginner: {
+        averageCourseFees: 50000,
+        expectedSalaryMin: 800000,
+        expectedSalaryMax: 1500000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "40%",
+        avgTimeToJob: 6,
+        skills: ['Python', 'ML Fundamentals', 'Neural Networks', 'NLP']
+      },
+      intermediate: {
+        averageCourseFees: 70000,
+        expectedSalaryMin: 1000000,
+        expectedSalaryMax: 2000000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "42%",
+        avgTimeToJob: 4,
+        skills: ['Deep Learning', 'Computer Vision', 'Reinforcement Learning']
+      },
+      advanced: {
+        averageCourseFees: 90000,
+        expectedSalaryMin: 1500000,
+        expectedSalaryMax: 3500000,
+        currentMarketDemand: "Extremely High",
+        jobGrowthRate: "45%",
+        avgTimeToJob: 2,
+        skills: ['AI Research', 'Model Architecture', 'AI Strategy', 'Leadership']
+      }
+    },
+    'devops': {
+      beginner: {
+        averageCourseFees: 40000,
+        expectedSalaryMin: 700000,
+        expectedSalaryMax: 1300000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "29%",
+        avgTimeToJob: 4,
+        skills: ['CI/CD', 'Docker', 'Kubernetes', 'Automation']
+      },
+      intermediate: {
+        averageCourseFees: 55000,
+        expectedSalaryMin: 900000,
+        expectedSalaryMax: 1800000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "32%",
+        avgTimeToJob: 3,
+        skills: ['Advanced DevOps', 'Monitoring', 'Security', 'Scale']
+      },
+      advanced: {
+        averageCourseFees: 70000,
+        expectedSalaryMin: 1300000,
+        expectedSalaryMax: 2600000,
+        currentMarketDemand: "Very High",
+        jobGrowthRate: "35%",
+        avgTimeToJob: 2,
+        skills: ['Platform Engineering', 'Strategy', 'Team Leadership']
+      }
+    },
+    'blockchain': {
+      beginner: {
+        averageCourseFees: 50000,
+        expectedSalaryMin: 800000,
+        expectedSalaryMax: 1600000,
+        currentMarketDemand: "High",
+        jobGrowthRate: "27%",
+        avgTimeToJob: 5,
+        skills: ['Solidity', 'Web3', 'Smart Contracts', 'DeFi']
+      },
+      intermediate: {
+        averageCourseFees: 70000,
+        expectedSalaryMin: 1000000,
+        expectedSalaryMax: 2000000,
+        currentMarketDemand: "High",
+        jobGrowthRate: "30%",
+        avgTimeToJob: 4,
+        skills: ['Advanced Blockchain', 'Security', 'Protocols']
+      },
+      advanced: {
+        averageCourseFees: 90000,
+        expectedSalaryMin: 1400000,
+        expectedSalaryMax: 3000000,
+        currentMarketDemand: "High",
+        jobGrowthRate: "33%",
+        avgTimeToJob: 3,
+        skills: ['Blockchain Architecture', 'Research', 'Leadership']
+      }
+    }
+  };
+
+  const data = roiData[domain]?.[skillLevel];
+  if (!data) return null;
+
+  const avgSalary = (data.expectedSalaryMin + data.expectedSalaryMax) / 2;
+  const investmentPeriodMonths = Math.ceil(timeInWeeks / 4.33); // Convert weeks to months
+  const paybackPeriodMonths = Math.ceil((data.averageCourseFees / (avgSalary / 12)));
+  const roiMultiplier = Math.round((avgSalary * 2) / data.averageCourseFees * 10) / 10; // 2-year ROI
+  
+  return {
+    estimatedTimeWeeks: timeInWeeks,
+    estimatedInvestment: data.averageCourseFees,
+    expectedSalaryRange: {
+      min: data.expectedSalaryMin,
+      max: data.expectedSalaryMax,
+      average: Math.round(avgSalary)
+    },
+    roiSummary: {
+      multiplier: roiMultiplier,
+      paybackPeriodMonths: paybackPeriodMonths,
+      description: `${roiMultiplier}x return in 2 years`
+    },
+    marketInsights: {
+      demand: data.currentMarketDemand,
+      growthRate: data.jobGrowthRate,
+      avgTimeToJob: data.avgTimeToJob
+    },
+    keySkills: data.skills,
+    explanation: `By investing ~${investmentPeriodMonths} months of learning and ₹${(data.averageCourseFees/1000).toFixed(0)}K, you can reach ₹${(data.expectedSalaryMin/100000).toFixed(0)}-${(data.expectedSalaryMax/100000).toFixed(0)} LPA, achieving a ${roiMultiplier}x ROI in 2 years with ${data.currentMarketDemand.toLowerCase()} market demand.`
+  };
+}
+
 function generateRoadmapData(careerDomain, skillLevel) {
   const roadmaps = {
     'web-development': {
@@ -1132,7 +1400,15 @@ function generateRoadmapData(careerDomain, skillLevel) {
   const roadmapTemplate = roadmaps[careerDomain.toLowerCase().replace(/\s+/g, '-')] || roadmaps['web-development'];
   const skillLevelData = roadmapTemplate[skillLevel] || roadmapTemplate.beginner;
 
-  return skillLevelData;
+  // Calculate ROI data
+  const timeInWeeks = parseInt(skillLevelData.total_estimated_time.replace(' weeks', ''));
+  const roiData = calculateROI(careerDomain.toLowerCase().replace(/\s+/g, '-'), skillLevel, timeInWeeks);
+
+  // Add ROI data to the response
+  return {
+    ...skillLevelData,
+    roiCalculator: roiData
+  };
 }
 
 module.exports = roadmapController;

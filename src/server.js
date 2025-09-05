@@ -13,7 +13,9 @@ const resumeRoutes = require('./routes/resumeRoutes');
 const progressRoutes = require('./routes/progressRoutes');
 const roadmapRoutes = require('./routes/roadmapRoutes');
 const roadmapProgressRoutes = require('./routes/roadmapProgressRoutes');
+const cleanupRoutes = require('./routes/cleanupRoutes');
 const { startJobSync } = require('./services/jobSyncService');
+const { localCleanupService } = require('./services/localStorageCleanup');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -50,6 +52,7 @@ app.use('/api/resume', resumeRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/roadmap', roadmapRoutes);
 app.use('/api/roadmap-progress', roadmapProgressRoutes);
+app.use('/api/cleanup', cleanupRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({
@@ -79,6 +82,11 @@ app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   
   if (process.env.NODE_ENV !== 'test') {
+    // Start job synchronization service
     startJobSync();
+    
+    // Start local storage cleanup service
+    // This only affects LOCAL files, cloud storage is never touched
+    localCleanupService.startScheduledCleanup();
   }
 });
