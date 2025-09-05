@@ -19,6 +19,9 @@ class LocalStorageService {
       // Write file to disk
       await fs.writeFile(uploadPath, fileBuffer);
 
+      // Log file creation for cleanup service tracking
+      console.log(`📁 Local file created: ${uniqueFileName} (will be auto-deleted after 24 hours)`);
+
       return {
         firebaseUrl: `/uploads/resumes/${uniqueFileName}`, // Temporary local URL
         firebaseStoragePath: uploadPath, // Local path for deletion
