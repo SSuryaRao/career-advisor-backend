@@ -14,6 +14,8 @@ const progressRoutes = require('./routes/progressRoutes');
 const roadmapRoutes = require('./routes/roadmapRoutes');
 const roadmapProgressRoutes = require('./routes/roadmapProgressRoutes');
 const cleanupRoutes = require('./routes/cleanupRoutes');
+const scholarshipRoutes = require('./routes/scholarshipRoutes');
+const internshipRoutes = require('./routes/internshipRoutes');
 const { startJobSync } = require('./services/jobSyncService');
 const { localCleanupService } = require('./services/localStorageCleanup');
 
@@ -53,6 +55,8 @@ app.use('/api/progress', progressRoutes);
 app.use('/api/roadmap', roadmapRoutes);
 app.use('/api/roadmap-progress', roadmapProgressRoutes);
 app.use('/api/cleanup', cleanupRoutes);
+app.use('/api/scholarships', scholarshipRoutes);
+app.use('/api/internships', internshipRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({
