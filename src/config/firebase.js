@@ -40,16 +40,40 @@ const initializeFirebase = () => {
     } else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
       try {
         const path = require('path');
+        const fs = require('fs');
         const serviceAccountPath = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+        
+        // Check if file exists before requiring it
+        if (!fs.existsSync(serviceAccountPath)) {
+          throw new Error(`Service account file not found at: ${serviceAccountPath}`);
+        }
+        
         serviceAccount = require(serviceAccountPath);
         validateFirebaseCredentials(serviceAccount);
-        credential = admin.credential.cert(serviceAccountPath);
+        credential = admin.credential.cert(serviceAccount);
       } catch (error) {
         throw new Error(`Failed to load service account from path: ${error.message}`);
       }
     } else {
-      console.log('⚠️ Using application default credentials');
-      credential = admin.credential.applicationDefault();
+      // Try to load from default local path as fallback
+      const path = require('path');
+      const fs = require('fs');
+      const defaultPath = path.join(__dirname, '../../credentials/firebase-service-account.json');
+      
+      if (fs.existsSync(defaultPath)) {
+        try {
+          serviceAccount = require(defaultPath);
+          validateFirebaseCredentials(serviceAccount);
+          credential = admin.credential.cert(serviceAccount);
+          console.log('✅ Using local Firebase service account file');
+        } catch (error) {
+          console.log('⚠️ Local service account file exists but failed to load, using application default credentials');
+          credential = admin.credential.applicationDefault();
+        }
+      } else {
+        console.log('⚠️ Using application default credentials');
+        credential = admin.credential.applicationDefault();
+      }
     }
 
     firebaseApp = admin.initializeApp({
