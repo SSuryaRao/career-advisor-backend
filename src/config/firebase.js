@@ -2,6 +2,28 @@ const admin = require('firebase-admin');
 
 let firebaseApp;
 
+const validateFirebaseCredentials = (serviceAccount) => {
+  if (!serviceAccount || typeof serviceAccount !== 'object') {
+    throw new Error('Invalid service account format');
+  }
+  
+  const requiredFields = ['type', 'project_id', 'private_key', 'client_email'];
+  for (const field of requiredFields) {
+    if (!serviceAccount[field]) {
+      throw new Error(`Missing required field: ${field}`);
+    }
+  }
+  
+  // Check for placeholder values
+  if (serviceAccount.client_email.includes('xxxxx') || 
+      serviceAccount.private_key.includes('placeholder') ||
+      serviceAccount.client_email.includes('placeholder')) {
+    throw new Error('Service account contains placeholder values. Please provide valid Firebase credentials.');
+  }
+  
+  return true;
+};
+
 const initializeFirebase = () => {
   if (firebaseApp) {
     return firebaseApp;
@@ -9,19 +31,31 @@ const initializeFirebase = () => {
 
   try {
     let credential;
+    let serviceAccount;
 
     if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      validateFirebaseCredentials(serviceAccount);
       credential = admin.credential.cert(serviceAccount);
     } else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-      credential = admin.credential.cert(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+      try {
+        const path = require('path');
+        const serviceAccountPath = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+        serviceAccount = require(serviceAccountPath);
+        validateFirebaseCredentials(serviceAccount);
+        credential = admin.credential.cert(serviceAccountPath);
+      } catch (error) {
+        throw new Error(`Failed to load service account from path: ${error.message}`);
+      }
     } else {
+      console.log('⚠️ Using application default credentials');
       credential = admin.credential.applicationDefault();
     }
 
     firebaseApp = admin.initializeApp({
       credential: credential,
-      projectId: process.env.FIREBASE_PROJECT_ID || 'career-advisor-6d3b0'
+      projectId: process.env.FIREBASE_PROJECT_ID || 'career-advisor-6d3b0',
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'career-advisor-6d3b0.firebasestorage.app'
     });
 
     console.log('✅ Firebase Admin initialized successfully');
@@ -36,6 +70,11 @@ const initializeFirebase = () => {
 const getFirebaseAuth = () => {
   const app = initializeFirebase();
   return app.auth();
+};
+
+const getFirebaseStorage = () => {
+  const app = initializeFirebase();
+  return app.storage();
 };
 
 const verifyIdToken = async (idToken) => {
@@ -74,6 +113,7 @@ const createCustomToken = async (uid, additionalClaims = {}) => {
 module.exports = {
   initializeFirebase,
   getFirebaseAuth,
+  getFirebaseStorage,
   verifyIdToken,
   getUserByUid,
   createCustomToken,

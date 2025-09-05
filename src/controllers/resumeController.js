@@ -2,8 +2,7 @@ const Resume = require('../models/Resume');
 const User = require('../models/User');
 const pdfParse = require('pdf-parse');
 const { v4: uuidv4 } = require('uuid');
-const fs = require('fs').promises;
-const path = require('path');
+const localStorage = require('../services/localStorage');
 
 // Gemini AI integration (you'll need to add @google/generative-ai to dependencies)
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -57,15 +56,40 @@ const uploadAndAnalyzeResume = async (req, res) => {
       });
     }
 
-    // Generate unique filename
-    const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-    const uploadPath = path.join(__dirname, '../../uploads/resumes', uniqueFileName);
-
-    // Ensure uploads directory exists
-    await fs.mkdir(path.dirname(uploadPath), { recursive: true });
-
-    // Move file to uploads directory
-    await fs.writeFile(uploadPath, file.buffer);
+    // Upload to storage (try Firebase first, fallback to local)
+    let uploadResult;
+    let storageType = 'firebase';
+    
+    try {
+      // Try Firebase Storage first
+      const firebaseStorage = require('../services/firebaseStorage');
+      uploadResult = await firebaseStorage.uploadResume(
+        file.buffer,
+        file.originalname,
+        userId
+      );
+      console.log('✅ Uploaded to Firebase Storage');
+    } catch (firebaseError) {
+      console.warn('⚠️ Firebase Storage failed, using local storage:', firebaseError.message);
+      
+      try {
+        // Fallback to local storage
+        uploadResult = await localStorage.uploadResume(
+          file.buffer,
+          file.originalname,
+          userId
+        );
+        storageType = 'local';
+        console.log('✅ Uploaded to local storage');
+      } catch (localError) {
+        console.error('❌ Both Firebase and local storage failed:', localError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to upload resume to storage',
+          errorCode: 'STORAGE_UPLOAD_FAILED'
+        });
+      }
+    }
 
     // Extract text from PDF first
     let extractedText;
@@ -89,15 +113,17 @@ const uploadAndAnalyzeResume = async (req, res) => {
     // Create resume record with extracted text
     const resume = new Resume({
       userId,
-      filename: uniqueFileName,
+      filename: uploadResult.filename,
       originalName: file.originalname,
       fileSize: file.size,
-      fileUrl: `/uploads/resumes/${uniqueFileName}`,
+      firebaseUrl: uploadResult.firebaseUrl,
+      firebaseStoragePath: uploadResult.firebaseStoragePath,
       extractedText: extractedText,
       textLength: extractedText.length,
       status: 'processing',
       metadata: {
         uploadMethod: req.body.uploadMethod || 'file-picker',
+        storageType: storageType,
         ipAddress: req.ip,
         userAgent: req.get('User-Agent')
       }
@@ -414,12 +440,20 @@ const deleteResume = async (req, res) => {
     resume.isActive = false;
     await resume.save();
 
-    // Try to delete physical file
+    // Delete from storage based on storage type
     try {
-      const filePath = path.join(__dirname, '../../uploads/resumes', resume.filename);
-      await fs.unlink(filePath);
+      const storageType = resume.metadata?.storageType || 'firebase';
+      
+      if (storageType === 'firebase') {
+        const firebaseStorage = require('../services/firebaseStorage');
+        await firebaseStorage.deleteResume(resume.firebaseStoragePath);
+        console.log('✅ Deleted from Firebase Storage');
+      } else {
+        await localStorage.deleteResume(resume.firebaseStoragePath);
+        console.log('✅ Deleted from local storage');
+      }
     } catch (fileError) {
-      console.log('File already deleted or not found:', fileError.message);
+      console.log('⚠️ File already deleted or not found:', fileError.message);
     }
 
     res.status(200).json({

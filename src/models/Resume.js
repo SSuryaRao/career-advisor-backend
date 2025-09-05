@@ -20,9 +20,13 @@ const resumeSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  fileUrl: {
+  firebaseUrl: {
     type: String,
-    required: true // URL to stored PDF file
+    required: true // Firebase Storage download URL
+  },
+  firebaseStoragePath: {
+    type: String,
+    required: true // Firebase Storage path for deletion
   },
   extractedText: {
     type: String,
