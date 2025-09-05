@@ -38,7 +38,7 @@ app.use(morgan('combined'));
 app.use(limiter);
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://career-craft-ai-three.vercel.app/'] 
+    ? ['https://career-craft-ai-three.vercel.app'] 
     : ['http://localhost:3000', 'http://127.0.0.1:3000'],
   credentials: true
 }));
