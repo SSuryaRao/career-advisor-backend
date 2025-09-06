@@ -357,9 +357,20 @@ userProgressSchema.statics.findOrCreateByUserId = function(userId) {
       return progress;
     }
     
+    // For testing purposes, handle cases where userId might be a string
+    // Convert string userId to ObjectId if needed, or use the string directly
+    let userIdToUse = userId;
+    try {
+      if (typeof userId === 'string' && userId.match(/^[0-9a-fA-F]{24}$/)) {
+        userIdToUse = require('mongoose').Types.ObjectId(userId);
+      }
+    } catch (error) {
+      console.log('Using userId as string for testing:', userId);
+    }
+    
     // Create new progress document
     return this.create({
-      userId,
+      userId: userIdToUse,
       completedResources: [],
       stats: {
         totalResourcesCompleted: 0,
