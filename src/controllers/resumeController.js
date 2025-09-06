@@ -17,12 +17,12 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey || '');
 const model = genAI.getGenerativeModel({ 
-  model: 'gemini-1.5-flash', // Use the correct model name
+  model: 'gemini-2.5-pro', // Use the correct model name
   generationConfig: {
     temperature: 0.7,
     topK: 40,
     topP: 0.95,
-    maxOutputTokens: 2048,
+    maxOutputTokens: 4096,
   },
 });
 
