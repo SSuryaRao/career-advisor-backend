@@ -1,3 +1,4 @@
+// Dialogflow CX routes commented out for deployment - will implement later
 const express = require('express');
 const router = express.Router();
 const chatbotController = require('../controllers/chatbotController');

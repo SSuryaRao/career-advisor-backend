@@ -17,7 +17,7 @@ const roadmapRoutes2 = require('./routes/roadmapRoutes2');
 console.log('📍 Loading recommendation routes...');
 const recommendationRoutes = require('./routes/recommendationRoutes');
 console.log('📍 Recommendation routes loaded:', typeof recommendationRoutes);
-const chatbotRoutes = require('./routes/chatbotRoutes');
+// const chatbotRoutes = require('./routes/chatbotRoutes'); // Commented out for deployment - will implement later
 const cleanupRoutes = require('./routes/cleanupRoutes');
 const scholarshipRoutes = require('./routes/scholarshipRoutes');
 const internshipRoutes = require('./routes/internshipRoutes');
@@ -69,7 +69,7 @@ app.use('/api/roadmap-progress', roadmapProgressRoutes);
 app.use('/api/roadmaps', roadmapRoutes2);
 console.log('📍 Registering recommendation routes...');
 app.use('/api/recommendations', recommendationRoutes);
-app.use('/api/chatbot', chatbotRoutes);
+// app.use('/api/chatbot', chatbotRoutes); // Commented out for deployment - will implement later
 app.use('/api/cleanup', cleanupRoutes);
 app.use('/api/scholarships', scholarshipRoutes);
 app.use('/api/internships', internshipRoutes);
