@@ -249,11 +249,11 @@ const analyzeResumeWithAI = async (resumeText) => {
   - Formatting: Assess structure, readability, sections, and ATS-friendly format
   - Experience: Evaluate impact statements, quantified results, and career progression
   - Skills: Review technical and soft skills relevance and presentation
-  - Provide 5-8 specific, actionable suggestions with before/after examples
+  - Provide 3-5 specific, actionable suggestions with before/after examples
   - Include Indian market context (salary expectations, company preferences, etc.)
   - Focus on quantifiable improvements and modern resume best practices
 
-  Return only valid JSON without any additional text or markdown.`;
+  IMPORTANT: Return ONLY a complete, valid JSON object. Do not include any text before or after the JSON. Ensure the JSON is properly closed with all brackets and braces.`;
 
   try {
     const result = await model.generateContent(prompt);
@@ -265,16 +265,89 @@ const analyzeResumeWithAI = async (resumeText) => {
 
     let jsonResponse = response.text().trim();
     
-    // Extract JSON if wrapped in markdown code blocks
+    // Extract JSON if wrapped in markdown code blocks - improved regex patterns
     if (jsonResponse.includes('```json')) {
-      const jsonMatch = jsonResponse.match(/```json\n([\s\S]*?)\n```/);
-      jsonResponse = jsonMatch ? jsonMatch[1] : jsonResponse;
+      const jsonMatch = jsonResponse.match(/```json\s*\n([\s\S]*?)\n\s*```/);
+      jsonResponse = jsonMatch ? jsonMatch[1].trim() : jsonResponse;
     } else if (jsonResponse.includes('```')) {
-      const jsonMatch = jsonResponse.match(/```\n([\s\S]*?)\n```/);
-      jsonResponse = jsonMatch ? jsonMatch[1] : jsonResponse;
+      const jsonMatch = jsonResponse.match(/```\s*\n([\s\S]*?)\n\s*```/);
+      jsonResponse = jsonMatch ? jsonMatch[1].trim() : jsonResponse;
+    }
+    
+    // Remove any remaining backticks or markdown artifacts
+    jsonResponse = jsonResponse.replace(/^```json\s*/g, '').replace(/^```\s*/g, '').replace(/\s*```$/g, '');
+    
+    // Additional cleanup for common AI response patterns
+    if (jsonResponse.startsWith('`') && jsonResponse.endsWith('`')) {
+      jsonResponse = jsonResponse.slice(1, -1);
     }
 
-    const analysis = JSON.parse(jsonResponse);
+    let analysis;
+    try {
+      analysis = JSON.parse(jsonResponse);
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError.message);
+      console.error('Raw Response:', jsonResponse.substring(0, 500));
+      
+      // Try to fix incomplete JSON by adding missing closing braces/brackets
+      let fixedJson = jsonResponse;
+      try {
+        // Count opening and closing braces/brackets
+        const openBraces = (fixedJson.match(/\{/g) || []).length;
+        const closeBraces = (fixedJson.match(/\}/g) || []).length;
+        const openBrackets = (fixedJson.match(/\[/g) || []).length;
+        const closeBrackets = (fixedJson.match(/\]/g) || []).length;
+        
+        // Add missing closing braces
+        for (let i = 0; i < openBraces - closeBraces; i++) {
+          fixedJson += '}';
+        }
+        
+        // Add missing closing brackets  
+        for (let i = 0; i < openBrackets - closeBrackets; i++) {
+          fixedJson += ']';
+        }
+        
+        console.log('Attempting to parse fixed JSON...');
+        analysis = JSON.parse(fixedJson);
+        console.log('✅ Successfully parsed fixed JSON');
+      } catch (fixError) {
+        console.error('Failed to fix JSON:', fixError.message);
+        
+        // Fallback analysis if JSON parsing fails
+        analysis = {
+        overallScore: 65,
+        scores: {
+          keywords: 60,
+          formatting: 70,
+          experience: 65,
+          skills: 65
+        },
+        suggestions: [
+          {
+            section: "Analysis Error",
+            issue: "Unable to analyze resume content due to parsing error",
+            improvement: "Please try uploading your resume again. Ensure your resume is in a clear, readable format (PDF recommended)."
+          },
+          {
+            section: "File Format",
+            issue: "There may be an issue with the resume file format or content structure",
+            improvement: "Try saving your resume as a new PDF file and upload again. Avoid complex formatting, images, or unusual fonts."
+          },
+          {
+            section: "Content Structure",
+            issue: "Resume content may not be properly readable by the analysis system",
+            improvement: "Ensure your resume has clear sections (Contact, Summary, Experience, Education, Skills) with standard formatting."
+          }
+        ],
+        keywordAnalysis: {
+          found: [],
+          missing: [],
+          suggestions: []
+        }
+        };
+      }
+    }
 
     // Validate and structure the response
     return {
