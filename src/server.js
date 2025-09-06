@@ -27,9 +27,13 @@ initializeFirebase();
 
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 500, // Increased from 100 to 500
   message: {
     error: 'Too many requests from this IP, please try again later.'
+  },
+  skip: (req) => {
+    // Skip rate limiting for health checks and development
+    return req.path === '/api/health' || process.env.NODE_ENV === 'development'
   }
 });
 
@@ -38,9 +42,11 @@ app.use(morgan('combined'));
 app.use(limiter);
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://career-craft-ai-three.vercel.app'] 
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
-  credentials: true
+    ? ['https://career-craft-ai-three.vercel.app', 'https://career-advisor-backend-y6sr.onrender.com'] 
+    : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
