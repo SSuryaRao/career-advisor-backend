@@ -13,6 +13,10 @@ const resumeRoutes = require('./routes/resumeRoutes');
 const progressRoutes = require('./routes/progressRoutes');
 const roadmapRoutes = require('./routes/roadmapRoutes');
 const roadmapProgressRoutes = require('./routes/roadmapProgressRoutes');
+const roadmapRoutes2 = require('./routes/roadmapRoutes2');
+console.log('📍 Loading recommendation routes...');
+const recommendationRoutes = require('./routes/recommendationRoutes');
+console.log('📍 Recommendation routes loaded:', typeof recommendationRoutes);
 const cleanupRoutes = require('./routes/cleanupRoutes');
 const scholarshipRoutes = require('./routes/scholarshipRoutes');
 const internshipRoutes = require('./routes/internshipRoutes');
@@ -61,6 +65,9 @@ app.use('/api/resume', resumeRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/roadmap', roadmapRoutes);
 app.use('/api/roadmap-progress', roadmapProgressRoutes);
+app.use('/api/roadmaps', roadmapRoutes2);
+console.log('📍 Registering recommendation routes...');
+app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/cleanup', cleanupRoutes);
 app.use('/api/scholarships', scholarshipRoutes);
 app.use('/api/internships', internshipRoutes);
@@ -93,6 +100,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   
+  // Force restart to pick up new routes
   if (process.env.NODE_ENV !== 'test') {
     // Start job synchronization service
     startJobSync();
