@@ -7,22 +7,22 @@ const getUserProgress = async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Validate user exists (skip in development for testing)
-    // For testing purposes, allow any valid ObjectId format
-    if (process.env.NODE_ENV !== 'development' && userId.match(/^[0-9a-fA-F]{24}$/)) {
-      try {
-        const user = await User.findById(userId);
-        if (!user) {
-          console.log(`User ${userId} not found, but continuing for testing purposes`);
-          // Don't fail - continue for testing
-        }
-      } catch (error) {
-        console.log(`Error finding user ${userId}:`, error.message);
-        // Don't fail - continue for testing
+    // Try to find user by Firebase UID first
+    let mongoUserId = userId;
+    try {
+      const user = await User.findByFirebaseUid(userId);
+      if (user) {
+        mongoUserId = user._id.toString();
+      } else {
+        // If user doesn't exist in MongoDB, continue with Firebase UID for progress tracking
+        console.log(`User with Firebase UID ${userId} not found in MongoDB, using UID for progress`);
       }
+    } catch (error) {
+      console.log(`Error finding user by Firebase UID ${userId}:`, error.message);
+      // Continue with Firebase UID
     }
     
-    const progress = await UserProgress.findOrCreateByUserId(userId);
+    const progress = await UserProgress.findOrCreateByUserId(mongoUserId);
     const summary = progress.getProgressSummary();
     
     res.status(200).json({
@@ -55,19 +55,20 @@ const completeResource = async (req, res) => {
       });
     }
     
-    // Validate user exists (skip in development for testing)
+    // Try to find user by Firebase UID first
+    let mongoUserId = userId;
     let user = null;
-    if (process.env.NODE_ENV !== 'development' && userId.match(/^[0-9a-fA-F]{24}$/)) {
-      try {
-        user = await User.findById(userId);
-        if (!user) {
-          console.log(`User ${userId} not found, but continuing for testing purposes`);
-          // Don't fail - continue for testing
-        }
-      } catch (error) {
-        console.log(`Error finding user ${userId}:`, error.message);
-        // Don't fail - continue for testing
+    try {
+      user = await User.findByFirebaseUid(userId);
+      if (user) {
+        mongoUserId = user._id.toString();
+      } else {
+        // If user doesn't exist in MongoDB, continue with Firebase UID for progress tracking
+        console.log(`User with Firebase UID ${userId} not found in MongoDB, using UID for progress`);
       }
+    } catch (error) {
+      console.log(`Error finding user by Firebase UID ${userId}:`, error.message);
+      // Continue with Firebase UID
     }
     
     // Find resource to get category
@@ -79,12 +80,12 @@ const completeResource = async (req, res) => {
       });
     }
     
-    const progress = await UserProgress.findOrCreateByUserId(userId);
+    const progress = await UserProgress.findOrCreateByUserId(mongoUserId);
     await progress.completeResource(parseInt(resourceId), resource.category, timeSpent, rating, notes);
     
     const summary = progress.getProgressSummary();
     
-    // Log activity in user model (skip in development)
+    // Log activity in user model if user exists
     if (user && user.logActivity) {
       await user.logActivity('resource_completed', {
         resourceId: parseInt(resourceId),
@@ -126,19 +127,20 @@ const uncompleteResource = async (req, res) => {
       });
     }
     
-    // Validate user exists (skip in development for testing)
+    // Try to find user by Firebase UID first
+    let mongoUserId = userId;
     let user = null;
-    if (process.env.NODE_ENV !== 'development' && userId.match(/^[0-9a-fA-F]{24}$/)) {
-      try {
-        user = await User.findById(userId);
-        if (!user) {
-          console.log(`User ${userId} not found, but continuing for testing purposes`);
-          // Don't fail - continue for testing
-        }
-      } catch (error) {
-        console.log(`Error finding user ${userId}:`, error.message);
-        // Don't fail - continue for testing
+    try {
+      user = await User.findByFirebaseUid(userId);
+      if (user) {
+        mongoUserId = user._id.toString();
+      } else {
+        // If user doesn't exist in MongoDB, continue with Firebase UID for progress tracking
+        console.log(`User with Firebase UID ${userId} not found in MongoDB, using UID for progress`);
       }
+    } catch (error) {
+      console.log(`Error finding user by Firebase UID ${userId}:`, error.message);
+      // Continue with Firebase UID
     }
     
     // Find resource to get category
@@ -150,12 +152,12 @@ const uncompleteResource = async (req, res) => {
       });
     }
     
-    const progress = await UserProgress.findOrCreateByUserId(userId);
+    const progress = await UserProgress.findOrCreateByUserId(mongoUserId);
     await progress.uncompleteResource(parseInt(resourceId), resource.category);
     
     const summary = progress.getProgressSummary();
     
-    // Log activity in user model (skip in development)
+    // Log activity in user model if user exists
     if (user && user.logActivity) {
       await user.logActivity('resource_uncompleted', {
         resourceId: parseInt(resourceId),

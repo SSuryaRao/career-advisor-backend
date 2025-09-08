@@ -67,7 +67,7 @@ class UserController {
 
   async updateProfile(req, res) {
     try {
-      const { uid } = req.user;
+      const { uid, email, name, picture, emailVerified } = req.user;
       const updates = req.body;
 
       const allowedFields = [
@@ -81,17 +81,49 @@ class UserController {
         }
       });
 
-      const user = await User.findOneAndUpdate(
+      let user = await User.findOneAndUpdate(
         { firebaseUid: uid },
         { ...filteredUpdates, updatedAt: new Date() },
         { new: true, runValidators: true }
       );
 
       if (!user) {
-        return res.status(404).json({
-          success: false,
-          error: 'User not found'
+        // User doesn't exist, create them first then apply updates
+        if (getUserByUid) {
+          try {
+            const firebaseUser = await getUserByUid(uid);
+            user = await User.createFromFirebase(firebaseUser);
+          } catch (firebaseError) {
+            console.error('Firebase Admin SDK error, creating from token data:', firebaseError.message);
+            // Fallback: create from token data
+            user = await User.create({
+              firebaseUid: uid,
+              email: email,
+              name: name || email,
+              picture: picture || null,
+              emailVerified: emailVerified || false,
+              lastLoginAt: new Date()
+            });
+          }
+        } else {
+          // Fallback: create from token data
+          user = await User.create({
+            firebaseUid: uid,
+            email: email,
+            name: name || email,
+            picture: picture || null,
+            emailVerified: emailVerified || false,
+            lastLoginAt: new Date()
+          });
+        }
+        console.log(`👤 Created new user profile for: ${user.email}`);
+        
+        // Now apply the updates to the newly created user
+        Object.keys(filteredUpdates).forEach(key => {
+          user[key] = filteredUpdates[key];
         });
+        user.updatedAt = new Date();
+        await user.save();
       }
 
       await user.logActivity('profile_updated', { updatedFields: Object.keys(filteredUpdates) });
