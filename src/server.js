@@ -10,20 +10,26 @@ const { initializeFirebase } = require('./config/firebase');
 const jobRoutes = require('./routes/jobRoutes');
 const userRoutes = require('./routes/userRoutes');
 const resumeRoutes = require('./routes/resumeRoutes');
+const resumeBuilderRoutes = require('./routes/resumeBuilderRoutes');
 const progressRoutes = require('./routes/progressRoutes');
 const roadmapRoutes = require('./routes/roadmapRoutes');
 const roadmapProgressRoutes = require('./routes/roadmapProgressRoutes');
 const roadmapRoutes2 = require('./routes/roadmapRoutes2');
+const mockInterviewRoutes = require('./routes/mockInterviewRoutes');
+const intelligentInterviewRoutes = require('./routes/intelligentInterviewRoutes');
 console.log('📍 Loading recommendation routes...');
 const recommendationRoutes = require('./routes/recommendationRoutes');
 console.log('📍 Recommendation routes loaded:', typeof recommendationRoutes);
-// const chatbotRoutes = require('./routes/chatbotRoutes'); // Commented out for deployment - will implement later
+const mentorRoutes = require('./routes/mentorRoutes');
+const chatbotRoutes = require('./routes/chatbotRoutes');
 const cleanupRoutes = require('./routes/cleanupRoutes');
 const scholarshipRoutes = require('./routes/scholarshipRoutes');
 const internshipRoutes = require('./routes/internshipRoutes');
 const testRoutes = require('./routes/testRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 const { startJobSync } = require('./services/jobSyncService');
 const { localCleanupService } = require('./services/localStorageCleanup');
+const dataSyncService = require('./services/dataSyncService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -63,17 +69,22 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/jobs', jobRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/resume', resumeRoutes);
+app.use('/api/resume-builder', resumeBuilderRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/roadmap', roadmapRoutes);
 app.use('/api/roadmap-progress', roadmapProgressRoutes);
 app.use('/api/roadmaps', roadmapRoutes2);
+app.use('/api/mock-interview', mockInterviewRoutes);
+app.use('/api/intelligent-interview', intelligentInterviewRoutes);
 console.log('📍 Registering recommendation routes...');
 app.use('/api/recommendations', recommendationRoutes);
-// app.use('/api/chatbot', chatbotRoutes); // Commented out for deployment - will implement later
+app.use('/api/mentor', mentorRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/cleanup', cleanupRoutes);
 app.use('/api/scholarships', scholarshipRoutes);
 app.use('/api/internships', internshipRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({
@@ -106,9 +117,12 @@ app.listen(PORT, () => {
   if (process.env.NODE_ENV !== 'test') {
     // Start job synchronization service
     startJobSync();
-    
+
     // Start local storage cleanup service
     // This only affects LOCAL files, cloud storage is never touched
     localCleanupService.startScheduledCleanup();
+
+    // Initialize BigQuery data sync cron jobs
+    dataSyncService.initializeCronJobs();
   }
 });

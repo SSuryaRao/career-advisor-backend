@@ -3,28 +3,80 @@ const User = require('../models/User');
 const pdfParse = require('pdf-parse');
 const { v4: uuidv4 } = require('uuid');
 const localStorage = require('../services/localStorage');
+const documentAI = require('../services/documentAI');
+const vertexAI = require('../services/vertexAI');
 
-// Gemini AI integration (you'll need to add @google/generative-ai to dependencies)
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+// Vertex AI is now used for AI analysis (more reliable than Gemini API)
+// Status will be logged during server startup
 
-// Initialize Gemini AI
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  console.error('❌ GEMINI_API_KEY is not set in environment variables');
-} else {
-  console.log('✅ GEMINI_API_KEY is configured');
-}
+/**
+ * Delete all old resumes for a user (both MongoDB and Firebase Storage)
+ * This ensures only the latest resume is kept
+ */
+const deleteOldResumes = async (userId) => {
+  try {
+    console.log(`🗑️ Checking for old resumes for user: ${userId}`);
 
-const genAI = new GoogleGenerativeAI(apiKey || '');
-const model = genAI.getGenerativeModel({ 
-  model: 'gemini-2.5-pro', // Use the correct model name
-  generationConfig: {
-    temperature: 0.7,
-    topK: 40,
-    topP: 0.95,
-    maxOutputTokens: 4096,
-  },
-});
+    // Find all active resumes for this user
+    const oldResumes = await Resume.find({
+      userId,
+      isActive: true
+    });
+
+    if (oldResumes.length === 0) {
+      console.log('✅ No old resumes to delete');
+      return { deleted: 0, errors: [] };
+    }
+
+    console.log(`📋 Found ${oldResumes.length} old resume(s) to delete`);
+
+    let deletedCount = 0;
+    const errors = [];
+
+    // Delete each old resume
+    for (const resume of oldResumes) {
+      try {
+        // Delete from Firebase Storage or local storage
+        const storageType = resume.metadata?.storageType || 'firebase';
+
+        if (storageType === 'firebase' && resume.firebaseStoragePath) {
+          try {
+            const firebaseStorage = require('../services/firebaseStorage');
+            await firebaseStorage.deleteResume(resume.firebaseStoragePath);
+            console.log(`✅ Deleted from Firebase Storage: ${resume.firebaseStoragePath}`);
+          } catch (storageError) {
+            console.warn(`⚠️ Could not delete from Firebase Storage: ${storageError.message}`);
+            errors.push({ resumeId: resume._id, error: storageError.message, type: 'storage' });
+          }
+        } else if (storageType === 'local' && resume.firebaseStoragePath) {
+          try {
+            await localStorage.deleteResume(resume.firebaseStoragePath);
+            console.log(`✅ Deleted from local storage: ${resume.firebaseStoragePath}`);
+          } catch (storageError) {
+            console.warn(`⚠️ Could not delete from local storage: ${storageError.message}`);
+            errors.push({ resumeId: resume._id, error: storageError.message, type: 'storage' });
+          }
+        }
+
+        // Delete from MongoDB (hard delete)
+        await Resume.deleteOne({ _id: resume._id });
+        console.log(`✅ Deleted resume from MongoDB: ${resume._id} (${resume.originalName})`);
+        deletedCount++;
+
+      } catch (error) {
+        console.error(`❌ Error deleting resume ${resume._id}:`, error.message);
+        errors.push({ resumeId: resume._id, error: error.message, type: 'general' });
+      }
+    }
+
+    console.log(`✅ Deleted ${deletedCount} old resume(s)`);
+    return { deleted: deletedCount, errors };
+
+  } catch (error) {
+    console.error('❌ Error in deleteOldResumes:', error);
+    throw error;
+  }
+};
 
 // Upload and analyze resume
 const uploadAndAnalyzeResume = async (req, res) => {
@@ -91,22 +143,73 @@ const uploadAndAnalyzeResume = async (req, res) => {
       }
     }
 
-    // Extract text from PDF first
-    let extractedText;
+    // Delete all old resumes for this user before uploading new one
     try {
-      const dataBuffer = file.buffer;
-      const pdfData = await pdfParse(dataBuffer);
-      extractedText = pdfData.text.trim();
-
-      if (!extractedText || extractedText.length < 50) {
-        throw new Error('Unable to extract sufficient text from PDF. The file may be image-based or corrupted.');
+      const deleteResult = await deleteOldResumes(userId);
+      console.log(`🧹 Cleanup complete: ${deleteResult.deleted} old resume(s) deleted`);
+      if (deleteResult.errors.length > 0) {
+        console.warn(`⚠️ Some errors during cleanup: ${deleteResult.errors.length} errors`);
       }
+    } catch (deleteError) {
+      // Log but don't fail the upload if old resume deletion fails
+      console.warn('⚠️ Error deleting old resumes (continuing with upload):', deleteError.message);
+    }
+
+    // Extract text from PDF - Try Document AI first, fallback to pdf-parse
+    let extractedText;
+    let structuredData = null;
+    let extractionMethod = 'pdf-parse'; // default
+    let extractionConfidence = 0;
+
+    try {
+      // Try Document AI first if configured
+      if (documentAI.isReady()) {
+        console.log('🤖 Using Document AI for text extraction...');
+        try {
+          const documentAIResult = await documentAI.processResume(file.buffer, file.mimetype);
+
+          if (documentAIResult.success && documentAIResult.text) {
+            extractedText = documentAIResult.text.trim();
+            structuredData = documentAIResult.structuredData;
+            extractionMethod = 'document-ai';
+            extractionConfidence = documentAIResult.confidence;
+
+            console.log('✅ Document AI extraction successful');
+            console.log(`📊 Confidence: ${extractionConfidence}, Pages: ${documentAIResult.pages}`);
+            console.log(`📧 Extracted: ${structuredData.email || 'N/A'}, 📱 Phone: ${structuredData.phone || 'N/A'}`);
+            console.log(`🎯 Skills found: ${structuredData.skills.length}`);
+          }
+        } catch (docAIError) {
+          console.warn('⚠️ Document AI failed, falling back to pdf-parse:', docAIError.message);
+        }
+      } else {
+        console.log('📝 Document AI not configured, using pdf-parse');
+      }
+
+      // Fallback to pdf-parse if Document AI didn't work or not configured
+      if (!extractedText) {
+        console.log('📄 Using pdf-parse for text extraction...');
+        const dataBuffer = file.buffer;
+        const pdfData = await pdfParse(dataBuffer);
+        extractedText = pdfData.text.trim();
+        extractionMethod = 'pdf-parse';
+        console.log('✅ pdf-parse extraction successful');
+      }
+
+      // Validate extracted text
+      if (!extractedText || extractedText.length < 50) {
+        throw new Error('Unable to extract sufficient text from PDF. The file may be image-based, corrupted, or contains mostly graphics.');
+      }
+
+      console.log(`✅ Text extraction complete. Length: ${extractedText.length} characters, Method: ${extractionMethod}`);
+
     } catch (extractionError) {
-      console.error('PDF text extraction error:', extractionError);
+      console.error('❌ PDF text extraction error:', extractionError);
       return res.status(422).json({
         success: false,
         message: extractionError.message || 'Failed to extract text from PDF',
-        errorCode: 'TEXT_EXTRACTION_FAILED'
+        errorCode: 'TEXT_EXTRACTION_FAILED',
+        details: 'Please ensure your PDF is text-based and not an image scan. Try saving as a new PDF if the issue persists.'
       });
     }
 
@@ -124,6 +227,9 @@ const uploadAndAnalyzeResume = async (req, res) => {
       metadata: {
         uploadMethod: req.body.uploadMethod || 'file-picker',
         storageType: storageType,
+        extractionMethod: extractionMethod,
+        extractionConfidence: extractionConfidence,
+        structuredDataAvailable: structuredData !== null,
         ipAddress: req.ip,
         userAgent: req.get('User-Agent')
       }
@@ -133,8 +239,8 @@ const uploadAndAnalyzeResume = async (req, res) => {
 
     // Analyze resume with AI
     try {
-      const analysisResult = await analyzeResumeWithAI(extractedText);
-      
+      const analysisResult = await analyzeResumeWithAI(extractedText, structuredData);
+
       // Update resume with analysis
       await resume.updateAnalysis(analysisResult);
 
@@ -161,10 +267,20 @@ const uploadAndAnalyzeResume = async (req, res) => {
           resumeId: resume._id,
           filename: resume.originalName,
           atsAnalysis: resume.atsAnalysis,
+          extractedInfo: structuredData ? {
+            name: structuredData.name,
+            email: structuredData.email,
+            phone: structuredData.phone,
+            skillsCount: structuredData.skills.length,
+            topSkills: structuredData.skills.slice(0, 10).map(s => s.name)
+          } : null,
           metadata: {
             processingTime,
             textLength: resume.textLength,
-            uploadedAt: resume.createdAt
+            uploadedAt: resume.createdAt,
+            extractionMethod: extractionMethod,
+            extractionConfidence: extractionConfidence,
+            aiEnhanced: structuredData !== null
           }
         }
       });
@@ -194,77 +310,117 @@ const uploadAndAnalyzeResume = async (req, res) => {
 };
 
 // AI Analysis function
-const analyzeResumeWithAI = async (resumeText) => {
-  const prompt = `Analyze this resume and provide a comprehensive ATS score and improvement suggestions. 
-  Focus on the Indian job market context.
+const analyzeResumeWithAI = async (resumeText, structuredData = null) => {
+  // Prepare additional context from structured data if available
+  let structuredContext = '';
+  if (structuredData) {
+    const topSkills = structuredData.skills.slice(0, 20).map(s => s.name).join(', ');
+    structuredContext = `
 
-  Resume Content:
-  ${resumeText}
-
-  Please provide your analysis in the following JSON format:
-  {
-    "overallScore": <number 0-100>,
-    "scores": {
-      "keywords": <number 0-100>,
-      "formatting": <number 0-100>,
-      "experience": <number 0-100>,
-      "skills": <number 0-100>
-    },
-    "suggestions": [
-      {
-        "section": "<section name>",
-        "issue": "<what's wrong>",
-        "improvement": "<how to fix it>",
-        "beforeAfter": {
-          "before": "<original text if applicable>",
-          "after": "<improved version>"
-        },
-        "priority": "<low|medium|high|critical>"
-      }
-    ],
-    "keywordAnalysis": {
-      "found": ["<keywords found in resume>"],
-      "missing": ["<important missing keywords>"],
-      "suggested": ["<recommended keywords to add>"],
-      "density": <percentage 0-100>
-    },
-    "strengths": ["<resume strengths>"],
-    "weaknesses": ["<areas needing improvement>"],
-    "industryMatch": {
-      "detectedIndustry": "<detected industry>",
-      "matchScore": <0-100>,
-      "recommendations": [
-        {
-          "industry": "<industry name>",
-          "score": <0-100>,
-          "reason": "<why this industry matches>"
-        }
-      ]
-    }
+EXTRACTED STRUCTURED DATA:
+- Contact: ${structuredData.email || 'N/A'} | ${structuredData.phone || 'N/A'}
+- Skills Found: ${topSkills || 'None'}
+- Education Sections: ${structuredData.education.length}
+- Work Experience Sections: ${structuredData.experience.length}
+- Certifications: ${structuredData.certifications.length}
+`;
   }
 
-  Analysis Guidelines:
-  - ATS Score: Rate based on keyword optimization, formatting, quantified achievements, and ATS compatibility
-  - Keywords: Check for industry-relevant terms, technical skills, and action verbs
-  - Formatting: Assess structure, readability, sections, and ATS-friendly format
-  - Experience: Evaluate impact statements, quantified results, and career progression
-  - Skills: Review technical and soft skills relevance and presentation
-  - Provide 3-5 specific, actionable suggestions with before/after examples
-  - Include Indian market context (salary expectations, company preferences, etc.)
-  - Focus on quantifiable improvements and modern resume best practices
+  const prompt = `You are an expert ATS (Applicant Tracking System) resume analyzer specializing in the Indian job market. Analyze this resume and provide actionable feedback.
 
-  IMPORTANT: Return ONLY a complete, valid JSON object. Do not include any text before or after the JSON. Ensure the JSON is properly closed with all brackets and braces.`;
+${structuredContext}
 
+RESUME TEXT:
+${resumeText.substring(0, 15000)}
+
+Analyze the resume thoroughly and return your analysis as VALID JSON ONLY (no markdown, no code blocks, no extra text).
+
+Your response must match this exact JSON structure:
+
+{
+  "overallScore": <number 0-100>,
+  "scores": {
+    "keywords": <number 0-100>,
+    "formatting": <number 0-100>,
+    "experience": <number 0-100>,
+    "skills": <number 0-100>
+  },
+  "suggestions": [
+    {
+      "section": "<section name>",
+      "issue": "<what's wrong>",
+      "improvement": "<how to fix it>",
+      "beforeAfter": {
+        "before": "<example of current text>",
+        "after": "<example of improved text>"
+      },
+      "priority": "critical|high|medium|low"
+    }
+  ],
+  "keywordAnalysis": {
+    "found": ["<relevant keywords found in resume>"],
+    "missing": ["<important keywords missing>"],
+    "suggested": ["<keywords to add for better ATS score>"],
+    "density": <number 0-100>
+  },
+  "strengths": ["<what the resume does well>"],
+  "weaknesses": ["<areas needing improvement>"]
+}
+
+ANALYSIS GUIDELINES:
+
+1. SCORING (0-100 for each):
+   - keywords: Presence of relevant industry/role keywords, action verbs, technical skills
+   - formatting: ATS-friendly structure, clear sections, proper headers, no complex tables/graphics
+   - experience: Quality of work descriptions, quantified achievements, relevance
+   - skills: Technical skills coverage, modern technologies, certifications
+   - overallScore: Weighted average with emphasis on keywords (40%), experience (30%), skills (20%), formatting (10%)
+
+2. SUGGESTIONS (provide 8-12 specific, actionable suggestions):
+   - Focus on high-impact changes
+   - Include "beforeAfter" examples for clarity
+   - Priority levels: critical (must fix), high (important), medium (recommended), low (nice to have)
+   - Cover: missing keywords, weak bullet points, formatting issues, quantifiable achievements, skill gaps
+
+3. KEYWORD ANALYSIS:
+   - found: List 15-25 relevant keywords actually present
+   - missing: List 10-15 important keywords for the role/industry that are absent
+   - suggested: List 10-15 specific keywords to add
+   - density: Score based on keyword usage (too few = low score, optimal = 70-85, keyword stuffing = penalty)
+
+4. STRENGTHS & WEAKNESSES (5-8 each):
+   - Strengths: Specific positive aspects
+   - Weaknesses: Concrete areas to improve
+
+5. INDIAN JOB MARKET CONSIDERATIONS:
+   - Check for proper contact information (phone, email)
+   - Educational qualifications formatting (B.Tech, M.Tech, etc.)
+   - Work experience presentation (company name, role, duration, achievements)
+   - Technical skills relevance to current market demands
+
+CRITICAL RULES:
+- Return ONLY the JSON object, no markdown formatting
+- Ensure all JSON strings are properly quoted and escaped
+- All arrays must be properly formatted
+- No trailing commas
+- Provide specific, actionable feedback
+- Use actual examples from the resume when possible`;
+
+  // Use Vertex AI with built-in retry logic (3 automatic retries)
   try {
-    const result = await model.generateContent(prompt);
-    const response = result.response;
+    console.log('🤖 Starting Vertex AI resume analysis...');
+    const responseText = await vertexAI.generateContent(
+      prompt,
+      3, // 3 retries
+      { maxOutputTokens: 16384, temperature: 0.3 }
+    );
 
-    if (!response || !response.text) {
-      throw new Error('Invalid response from AI model');
+    if (!responseText || responseText.length === 0) {
+      throw new Error('Invalid response from Vertex AI');
     }
 
-    let jsonResponse = response.text().trim();
-    
+    let jsonResponse = responseText.trim();
+
     // Extract JSON if wrapped in markdown code blocks - improved regex patterns
     if (jsonResponse.includes('```json')) {
       const jsonMatch = jsonResponse.match(/```json\s*\n([\s\S]*?)\n\s*```/);
@@ -273,10 +429,10 @@ const analyzeResumeWithAI = async (resumeText) => {
       const jsonMatch = jsonResponse.match(/```\s*\n([\s\S]*?)\n\s*```/);
       jsonResponse = jsonMatch ? jsonMatch[1].trim() : jsonResponse;
     }
-    
+
     // Remove any remaining backticks or markdown artifacts
     jsonResponse = jsonResponse.replace(/^```json\s*/g, '').replace(/^```\s*/g, '').replace(/\s*```$/g, '');
-    
+
     // Additional cleanup for common AI response patterns
     if (jsonResponse.startsWith('`') && jsonResponse.endsWith('`')) {
       jsonResponse = jsonResponse.slice(1, -1);
@@ -288,68 +444,96 @@ const analyzeResumeWithAI = async (resumeText) => {
     } catch (parseError) {
       console.error('JSON Parse Error:', parseError.message);
       console.error('Raw Response:', jsonResponse.substring(0, 500));
-      
-      // Try to fix incomplete JSON by adding missing closing braces/brackets
+
+      // Try to fix incomplete JSON by truncating at the last valid position
       let fixedJson = jsonResponse;
       try {
-        // Count opening and closing braces/brackets
-        const openBraces = (fixedJson.match(/\{/g) || []).length;
-        const closeBraces = (fixedJson.match(/\}/g) || []).length;
-        const openBrackets = (fixedJson.match(/\[/g) || []).length;
-        const closeBrackets = (fixedJson.match(/\]/g) || []).length;
-        
-        // Add missing closing braces
-        for (let i = 0; i < openBraces - closeBraces; i++) {
-          fixedJson += '}';
+        // If there's an unterminated string, find the last complete field
+        if (parseError.message.includes('Unterminated string')) {
+          // Find the last complete closing brace before the error
+          const lastValidBrace = fixedJson.lastIndexOf('}', parseError.message.match(/position (\d+)/)?.[1] || fixedJson.length);
+
+          if (lastValidBrace > 0) {
+            // Try to salvage everything up to the last valid object
+            fixedJson = fixedJson.substring(0, lastValidBrace + 1);
+
+            // Count and balance braces/brackets
+            const openBraces = (fixedJson.match(/\{/g) || []).length;
+            const closeBraces = (fixedJson.match(/\}/g) || []).length;
+            const openBrackets = (fixedJson.match(/\[/g) || []).length;
+            const closeBrackets = (fixedJson.match(/\]/g) || []).length;
+
+            // Close any unclosed arrays
+            for (let i = 0; i < openBrackets - closeBrackets; i++) {
+              fixedJson += ']';
+            }
+
+            // Close any unclosed objects
+            for (let i = 0; i < openBraces - closeBraces; i++) {
+              fixedJson += '}';
+            }
+          }
+        } else {
+          // For other errors, try standard brace/bracket balancing
+          const openBraces = (fixedJson.match(/\{/g) || []).length;
+          const closeBraces = (fixedJson.match(/\}/g) || []).length;
+          const openBrackets = (fixedJson.match(/\[/g) || []).length;
+          const closeBrackets = (fixedJson.match(/\]/g) || []).length;
+
+          // Add missing closing brackets
+          for (let i = 0; i < openBrackets - closeBrackets; i++) {
+            fixedJson += ']';
+          }
+
+          // Add missing closing braces
+          for (let i = 0; i < openBraces - closeBraces; i++) {
+            fixedJson += '}';
+          }
         }
-        
-        // Add missing closing brackets  
-        for (let i = 0; i < openBrackets - closeBrackets; i++) {
-          fixedJson += ']';
-        }
-        
+
         console.log('Attempting to parse fixed JSON...');
         analysis = JSON.parse(fixedJson);
         console.log('✅ Successfully parsed fixed JSON');
       } catch (fixError) {
         console.error('Failed to fix JSON:', fixError.message);
-        
+
         // Fallback analysis if JSON parsing fails
         analysis = {
-        overallScore: 65,
-        scores: {
-          keywords: 60,
-          formatting: 70,
-          experience: 65,
-          skills: 65
-        },
-        suggestions: [
-          {
-            section: "Analysis Error",
-            issue: "Unable to analyze resume content due to parsing error",
-            improvement: "Please try uploading your resume again. Ensure your resume is in a clear, readable format (PDF recommended)."
+          overallScore: 65,
+          scores: {
+            keywords: 60,
+            formatting: 70,
+            experience: 65,
+            skills: 65
           },
-          {
-            section: "File Format",
-            issue: "There may be an issue with the resume file format or content structure",
-            improvement: "Try saving your resume as a new PDF file and upload again. Avoid complex formatting, images, or unusual fonts."
-          },
-          {
-            section: "Content Structure",
-            issue: "Resume content may not be properly readable by the analysis system",
-            improvement: "Ensure your resume has clear sections (Contact, Summary, Experience, Education, Skills) with standard formatting."
+          suggestions: [
+            {
+              section: "Analysis Error",
+              issue: "Unable to analyze resume content due to parsing error",
+              improvement: "Please try uploading your resume again. Ensure your resume is in a clear, readable format (PDF recommended)."
+            },
+            {
+              section: "File Format",
+              issue: "There may be an issue with the resume file format or content structure",
+              improvement: "Try saving your resume as a new PDF file and upload again. Avoid complex formatting, images, or unusual fonts."
+            },
+            {
+              section: "Content Structure",
+              issue: "Resume content may not be properly readable by the analysis system",
+              improvement: "Ensure your resume has clear sections (Contact, Summary, Experience, Education, Skills) with standard formatting."
+            }
+          ],
+          keywordAnalysis: {
+            found: [],
+            missing: [],
+            suggested: []
           }
-        ],
-        keywordAnalysis: {
-          found: [],
-          missing: [],
-          suggestions: []
-        }
         };
       }
     }
 
-    // Validate and structure the response
+    // Validate and structure the response - SUCCESS!
+    console.log('✅ Vertex AI analysis successful');
     return {
       overallScore: Math.min(100, Math.max(0, analysis.overallScore || 0)),
       scores: {
@@ -366,59 +550,49 @@ const analyzeResumeWithAI = async (resumeText) => {
         density: Math.min(100, Math.max(0, analysis.keywordAnalysis?.density || 0))
       },
       strengths: analysis.strengths || [],
-      weaknesses: analysis.weaknesses || [],
-      industryMatch: analysis.industryMatch || {
-        detectedIndustry: 'General',
-        matchScore: 50,
-        recommendations: []
-      }
+      weaknesses: analysis.weaknesses || []
     };
 
   } catch (error) {
-    console.error('AI analysis error:', error);
-    
-    // Fallback analysis
-    return {
-      overallScore: 65,
-      scores: {
-        keywords: 60,
-        formatting: 70,
-        experience: 65,
-        skills: 70
-      },
-      suggestions: [
-        {
-          section: "Summary/Objective",
-          issue: "Generic summary without specific achievements",
-          improvement: "Add quantified results and target role keywords",
-          beforeAfter: {
-            before: "Experienced software developer with good skills",
-            after: "Results-driven Software Engineer with 3+ years experience, increased application performance by 40%"
-          },
-          priority: "high"
-        }
-      ],
-      keywordAnalysis: {
-        found: ["JavaScript", "React", "Node.js"],
-        missing: ["TypeScript", "AWS", "Docker"],
-        suggested: ["Add cloud technologies", "Include modern frameworks"],
-        density: 65
-      },
-      strengths: ["Technical skills listed", "Work experience included"],
-      weaknesses: ["Lacks quantified achievements", "Missing keywords"],
-      industryMatch: {
-        detectedIndustry: "Technology",
-        matchScore: 75,
-        recommendations: [
-          {
-            industry: "Software Development",
-            score: 80,
-            reason: "Strong technical background and programming experience"
-          }
-        ]
-      }
-    };
+    // Vertex AI request failed after all retries
+    console.error('❌ Vertex AI analysis failed:', error.message);
   }
+
+  return {
+    overallScore: 65,
+    scores: {
+      keywords: 60,
+      formatting: 70,
+      experience: 65,
+      skills: 70
+    },
+    suggestions: [
+      {
+        section: "API Error",
+        issue: "AI service temporarily unavailable",
+        improvement: "The AI analysis service is currently overloaded. Please try uploading your resume again in a few moments.",
+        priority: "high"
+      },
+      {
+        section: "Summary/Objective",
+        issue: "Generic summary without specific achievements",
+        improvement: "Add quantified results and target role keywords",
+        beforeAfter: {
+          before: "Experienced software developer with good skills",
+          after: "Results-driven Software Engineer with 3+ years experience, increased application performance by 40%"
+        },
+        priority: "medium"
+      }
+    ],
+    keywordAnalysis: {
+      found: ["JavaScript", "React", "Node.js"],
+      missing: ["TypeScript", "AWS", "Docker"],
+      suggested: ["TypeScript", "AWS", "Docker", "Kubernetes", "CI/CD"],
+      density: 65
+    },
+    strengths: ["Resume uploaded successfully", "Document processed"],
+    weaknesses: ["AI analysis temporarily unavailable", "Please retry in a few moments"]
+  };
 };
 
 // Get user's resume history

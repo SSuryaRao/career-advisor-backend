@@ -8,6 +8,10 @@ const {
   deleteResume,
   getAnalytics
 } = require('../controllers/resumeController');
+const {
+  improveResume,
+  getImprovementStatus
+} = require('../controllers/resumeImprover');
 const { authenticateUser } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -67,6 +71,11 @@ router.get('/analytics', getAnalytics);
 router.get('/:resumeId', getResumeAnalysis);
 
 router.delete('/:resumeId', deleteResume);
+
+// Resume improvement routes
+router.post('/:resumeId/improve', improveResume);
+
+router.get('/:resumeId/improvement', getImprovementStatus);
 
 // Error handling middleware for multer
 router.use((error, req, res, next) => {

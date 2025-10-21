@@ -195,6 +195,71 @@ const resumeSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  roadmapRecommendations: {
+    careerDomain: String,
+    skillLevel: {
+      type: String,
+      enum: ['beginner', 'intermediate', 'advanced']
+    },
+    confidence: {
+      type: Number,
+      min: 0,
+      max: 100
+    },
+    reasons: [String],
+    skillGaps: [String],
+    nextSteps: [String],
+    generatedAt: Date,
+    lastUpdated: Date
+  },
+  careerInsights: {
+    currentLevel: {
+      type: String,
+      enum: ['entry', 'intermediate', 'advanced', 'expert']
+    },
+    yearsOfExperience: Number,
+    primaryDomain: String,
+    secondaryDomains: [String],
+    readinessScore: {
+      type: Number,
+      min: 0,
+      max: 100
+    }
+  },
+  improvement: {
+    originalScore: {
+      type: Number,
+      min: 0,
+      max: 100
+    },
+    improvedScore: {
+      type: Number,
+      min: 0,
+      max: 100
+    },
+    scoreIncrease: {
+      type: Number
+    },
+    improvedResumeUrl: String,
+    improvedResumePath: String,
+    storageType: {
+      type: String,
+      enum: ['firebase', 'local']
+    },
+    appliedSuggestions: Number,
+    generatedAt: Date,
+    processingTime: Number,
+    improvedAnalysis: {
+      overallScore: Number,
+      scores: {
+        keywords: Number,
+        formatting: Number,
+        experience: Number,
+        skills: Number
+      },
+      topStrengths: [String]
+    }
   }
 }, {
   timestamps: true,

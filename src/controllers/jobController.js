@@ -1,4 +1,5 @@
 const Job = require('../models/Job');
+const jobRecommendationService = require('../services/jobRecommendationService');
 
 class JobController {
   async getAllJobs(req, res) {
@@ -12,11 +13,19 @@ class JobController {
         jobType,
         experienceLevel,
         sortBy = 'postedAt',
-        sortOrder = 'desc'
+        sortOrder = 'desc',
+        daysOld
       } = req.query;
 
       const skip = (page - 1) * limit;
       const query = { isActive: true };
+
+      // Filter by job age (days old)
+      if (daysOld) {
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - parseInt(daysOld));
+        query.postedAt = { $gte: daysAgo };
+      }
 
       if (search) {
         query.$text = { $search: search };
@@ -225,6 +234,50 @@ class JobController {
       res.status(500).json({
         success: false,
         error: 'Search failed',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Get AI-powered job recommendations for authenticated user
+   */
+  async getRecommendations(req, res) {
+    try {
+      const firebaseUid = req.user?.uid;
+
+      if (!firebaseUid) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required',
+          message: 'Please login to get personalized recommendations'
+        });
+      }
+
+      const { limit, minMatchScore } = req.query;
+
+      const options = {
+        limit: limit ? parseInt(limit) : 10,
+        minMatchScore: minMatchScore ? parseInt(minMatchScore) : 50,
+        includeReasons: true
+      };
+
+      console.log(`🎯 Getting job recommendations for user ${firebaseUid}`);
+
+      const result = await jobRecommendationService.getRecommendations(firebaseUid, options);
+
+      res.status(200).json({
+        success: result.success,
+        data: result.recommendations,
+        total: result.total,
+        message: result.message
+      });
+
+    } catch (error) {
+      console.error('Error in getRecommendations:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to generate recommendations',
         message: error.message
       });
     }

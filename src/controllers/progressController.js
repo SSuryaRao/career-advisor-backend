@@ -510,6 +510,154 @@ const getLeaderboard = async (req, res) => {
   }
 };
 
+// Get unified dashboard summary (combines all progress data)
+const getDashboardSummary = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Try to find user by Firebase UID first
+    let mongoUserId = userId;
+    try {
+      const user = await User.findByFirebaseUid(userId);
+      if (user) {
+        mongoUserId = user._id.toString();
+      } else {
+        console.log(`User with Firebase UID ${userId} not found in MongoDB, using UID for progress`);
+      }
+    } catch (error) {
+      console.log(`Error finding user by Firebase UID ${userId}:`, error.message);
+    }
+
+    // Get resource progress
+    const resourceProgress = await UserProgress.findOrCreateByUserId(mongoUserId);
+    const resourceSummary = resourceProgress.getProgressSummary();
+
+    // Get roadmap progress
+    const RoadmapProgress = require('../models/RoadmapProgress');
+    const roadmaps = await RoadmapProgress.find({ userId: mongoUserId }).sort({ updatedAt: -1 });
+
+    let totalRoadmapMilestones = 0;
+    let completedRoadmapMilestones = 0;
+
+    const roadmapsWithProgress = roadmaps.map(roadmap => {
+      const totalMilestones = roadmap.roadmapData.stages.reduce(
+        (total, stage) => total + stage.milestones.length, 0
+      );
+      const completedCount = roadmap.completedMilestones.length;
+      const progressPercentage = Math.round((completedCount / totalMilestones) * 100);
+
+      totalRoadmapMilestones += totalMilestones;
+      completedRoadmapMilestones += completedCount;
+
+      return {
+        careerDomain: roadmap.careerDomain,
+        skillLevel: roadmap.skillLevel,
+        totalMilestones,
+        completedMilestones: completedCount,
+        progressPercentage,
+        lastUpdated: roadmap.updatedAt
+      };
+    });
+
+    // Get mock interview progress
+    const MockInterviewProgress = require('../models/MockInterviewProgress');
+    const mockInterviewProgress = await MockInterviewProgress.findOrCreateByUserId(mongoUserId);
+    const mockInterviewStats = mockInterviewProgress.getStats();
+
+    // Calculate overall progress metrics
+    const resourcesCompleted = resourceProgress.completedResources.length;
+    const totalResources = featuredResources.length;
+    const resourcesPercentage = Math.round((resourcesCompleted / totalResources) * 100);
+
+    const roadmapPercentage = totalRoadmapMilestones > 0
+      ? Math.round((completedRoadmapMilestones / totalRoadmapMilestones) * 100)
+      : 0;
+
+    // Calculate overall completion (weighted average)
+    const overallCompletion = Math.round(
+      (resourcesPercentage * 0.4) +
+      (roadmapPercentage * 0.4) +
+      (mockInterviewStats.avgAptitudeScore * 0.2)
+    );
+
+    // Recent activity (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const recentResourceActivity = resourceProgress.completedResources.filter(
+      r => new Date(r.completedAt) >= sevenDaysAgo
+    ).length;
+
+    const recentRoadmapActivity = roadmaps.filter(
+      r => new Date(r.updatedAt) >= sevenDaysAgo
+    ).length;
+
+    const recentMockInterviews = mockInterviewProgress.interviewSessions.filter(
+      s => new Date(s.completedAt) >= sevenDaysAgo
+    ).length;
+
+    const recentAptitudeTests = mockInterviewProgress.aptitudeTests.filter(
+      t => new Date(t.completedAt) >= sevenDaysAgo
+    ).length;
+
+    const summary = {
+      overall: {
+        completionPercentage: overallCompletion,
+        learningStreak: resourceProgress.stats.streak.current,
+        totalAchievements: resourceProgress.achievements.length,
+        weeklyGoal: resourceProgress.stats.weeklyGoal
+      },
+      resources: {
+        completed: resourcesCompleted,
+        total: totalResources,
+        percentage: resourcesPercentage,
+        byCategory: resourceSummary.byCategory,
+        recentActivity: recentResourceActivity
+      },
+      roadmaps: {
+        activeRoadmaps: roadmaps.length,
+        totalMilestones: totalRoadmapMilestones,
+        completedMilestones: completedRoadmapMilestones,
+        percentage: roadmapPercentage,
+        roadmaps: roadmapsWithProgress,
+        recentActivity: recentRoadmapActivity
+      },
+      mockInterviews: {
+        totalInterviews: mockInterviewStats.totalInterviews,
+        totalAptitudeTests: mockInterviewStats.totalAptitudeTests,
+        avgAptitudeScore: mockInterviewStats.avgAptitudeScore,
+        performanceByType: mockInterviewStats.performanceByType,
+        strongCategories: mockInterviewStats.strongCategories,
+        weakCategories: mockInterviewStats.weakCategories,
+        recentInterviews: recentMockInterviews,
+        recentTests: recentAptitudeTests
+      },
+      recentActivity: {
+        last7Days: {
+          resources: recentResourceActivity,
+          roadmaps: recentRoadmapActivity,
+          mockInterviews: recentMockInterviews,
+          aptitudeTests: recentAptitudeTests,
+          total: recentResourceActivity + recentRoadmapActivity + recentMockInterviews + recentAptitudeTests
+        }
+      },
+      achievements: resourceProgress.achievements.slice(-5).reverse()
+    };
+
+    res.status(200).json({
+      success: true,
+      data: summary
+    });
+  } catch (error) {
+    console.error('Error fetching dashboard summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getUserProgress,
   completeResource,
@@ -519,5 +667,6 @@ module.exports = {
   updatePreferences,
   updateWeeklyGoal,
   getProgressStats,
-  getLeaderboard
+  getLeaderboard,
+  getDashboardSummary
 };

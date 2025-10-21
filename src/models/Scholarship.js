@@ -32,7 +32,7 @@ const scholarshipSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['UG', 'PG', 'Research', 'General', 'Women', 'Minority', 'Merit-based', 'Need-based'],
+    enum: ['UG', 'PG', 'Research', 'General', 'Women', 'Minority', 'Merit-based', 'Need-based', 'Internship'],
     default: 'General'
   },
   domain: {

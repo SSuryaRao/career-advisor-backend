@@ -9,7 +9,8 @@ const {
   updatePreferences,
   updateWeeklyGoal,
   getProgressStats,
-  getLeaderboard
+  getLeaderboard,
+  getDashboardSummary
 } = require('../controllers/progressController');
 
 // Get user progress
@@ -38,5 +39,8 @@ router.put('/user/:userId/weekly-goal', updateWeeklyGoal);
 
 // Get leaderboard
 router.get('/leaderboard', getLeaderboard);
+
+// Get unified dashboard summary
+router.get('/dashboard/:userId', getDashboardSummary);
 
 module.exports = router;

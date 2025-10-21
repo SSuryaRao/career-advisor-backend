@@ -224,6 +224,16 @@ const userSchema = new mongoose.Schema({
   lastLoginAt: {
     type: Date,
     default: Date.now
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  adminRole: {
+    type: String,
+    enum: ['super-admin', 'admin', 'moderator', null],
+    default: null
   }
 }, {
   timestamps: true,
