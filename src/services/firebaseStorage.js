@@ -13,7 +13,19 @@ class FirebaseStorageService {
   }
 
   async uploadResume(fileBuffer, originalName, userId) {
+    const startTime = Date.now();
+
     try {
+      console.log(`📤 Starting upload: ${originalName} (${(fileBuffer.length / 1024).toFixed(2)} KB) for user: ${userId}`);
+
+      if (!fileBuffer || fileBuffer.length === 0) {
+        throw new Error('Invalid file buffer: empty or null');
+      }
+
+      if (!this.bucket) {
+        throw new Error('Firebase Storage bucket not initialized');
+      }
+
       const uniqueFileName = `${uuidv4()}-${originalName}`;
       const storagePath = `resumes/${userId}/${uniqueFileName}`;
       const file = this.bucket.file(storagePath);
@@ -27,37 +39,71 @@ class FirebaseStorageService {
             uploadedAt: new Date().toISOString()
           }
         },
-        resumable: false
+        resumable: false,
+        validation: 'crc32c'
       });
 
       return new Promise((resolve, reject) => {
+        let uploadComplete = false;
+
         stream.on('error', (error) => {
-          console.error('Firebase Storage upload error:', error);
-          reject(error);
+          if (uploadComplete) return;
+          uploadComplete = true;
+
+          console.error('❌ Firebase Storage upload error:', {
+            message: error.message,
+            code: error.code,
+            timeMs: Date.now() - startTime
+          });
+
+          reject(new Error(`Firebase upload failed: ${error.message}`));
         });
 
         stream.on('finish', async () => {
+          if (uploadComplete) return;
+
           try {
+            console.log(`✅ File written to storage in ${Date.now() - startTime}ms, making public...`);
+
             await file.makePublic();
-            
+
             const downloadURL = `https://storage.googleapis.com/${this.bucket.name}/${storagePath}`;
-            
+
+            uploadComplete = true;
+
+            console.log(`✅ Upload complete in ${Date.now() - startTime}ms: ${downloadURL}`);
+
             resolve({
               firebaseUrl: downloadURL,
               firebaseStoragePath: storagePath,
               filename: uniqueFileName
             });
           } catch (error) {
-            console.error('Error making file public:', error);
-            reject(error);
+            if (uploadComplete) return;
+            uploadComplete = true;
+
+            console.error('❌ Error making file public:', {
+              message: error.message,
+              timeMs: Date.now() - startTime
+            });
+
+            reject(new Error(`Failed to make file public: ${error.message}`));
           }
         });
+
+        // Handle write completion timeout
+        setTimeout(() => {
+          if (!uploadComplete) {
+            uploadComplete = true;
+            reject(new Error('Upload stream timeout - no finish event received'));
+          }
+        }, 55000); // 55 seconds (less than controller timeout)
 
         stream.end(fileBuffer);
       });
     } catch (error) {
-      console.error('Upload resume error:', error);
-      throw error;
+      console.error(`❌ Upload resume error after ${Date.now() - startTime}ms:`, error.message);
+      throw new Error(`Firebase upload failed: ${error.message}`);
     }
   }
 

@@ -7,16 +7,34 @@ const firebaseStorage = require('../services/firebaseStorage');
  * Generate professional summary using AI
  */
 const generateProfessionalSummary = async (req, res) => {
+  const startTime = Date.now();
+
   try {
     const { uid: userId } = req.user;
     const resumeData = req.body;
 
     console.log('🤖 Generating professional summary for user:', userId);
 
-    // Get user profile for additional context
-    const user = await User.findByFirebaseUid(userId);
+    // Get user profile for additional context with timeout
+    let user;
+    try {
+      user = await Promise.race([
+        User.findByFirebaseUid(userId),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('User lookup timeout')), 5000)
+        )
+      ]);
+    } catch (dbError) {
+      console.error('❌ User lookup failed:', dbError.message);
+      return res.status(503).json({
+        success: false,
+        message: 'Database temporarily unavailable',
+        error: dbError.message
+      });
+    }
 
     if (!user) {
+      console.warn('⚠️ User profile not found for:', userId);
       return res.status(404).json({
         success: false,
         message: 'User profile not found'
@@ -65,26 +83,46 @@ Write a compelling professional summary that:
 
 Return ONLY the summary text, no extra formatting or quotes.`;
 
-    // Generate summary with Vertex AI
-    const summary = await vertexAI.generateContent(prompt, 2, {
-      temperature: 0.7,
-      maxOutputTokens: 300,
-      topP: 0.9
-    });
+    // Generate summary with Vertex AI with timeout protection (20 seconds)
+    let summary;
+    try {
+      summary = await Promise.race([
+        vertexAI.generateContent(prompt, 2, {
+          temperature: 0.7,
+          maxOutputTokens: 300,
+          topP: 0.9
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('AI generation timeout after 20 seconds')), 20000)
+        )
+      ]);
 
-    console.log('✅ Professional summary generated successfully');
+      console.log(`✅ Professional summary generated successfully in ${Date.now() - startTime}ms`);
+    } catch (aiError) {
+      console.error('❌ AI summary generation failed:', aiError.message);
+      return res.status(503).json({
+        success: false,
+        message: 'AI service temporarily unavailable. Please try again.',
+        error: aiError.message,
+        timeMs: Date.now() - startTime
+      });
+    }
 
     res.json({
       success: true,
-      summary: summary.trim()
+      summary: summary.trim(),
+      timeMs: Date.now() - startTime
     });
 
   } catch (error) {
-    console.error('❌ Error generating professional summary:', error);
+    const errorTime = Date.now() - startTime;
+    console.error(`❌ Error generating professional summary after ${errorTime}ms:`, error.message);
+
     res.status(500).json({
       success: false,
       message: 'Failed to generate professional summary',
-      error: error.message
+      error: error.message,
+      timeMs: errorTime
     });
   }
 };
@@ -93,32 +131,47 @@ Return ONLY the summary text, no extra formatting or quotes.`;
  * Create resume PDF from user profile and form data
  */
 const createResumeFromProfile = async (req, res) => {
+  const startTime = Date.now();
+
   try {
     const { uid: userId } = req.user;
     const { templateId = 'professional', ...resumeData } = req.body;
 
     console.log('📝 Creating resume for user:', userId, 'with template:', templateId);
+    console.log('📊 Resume data received:', {
+      name: resumeData.name,
+      email: resumeData.email,
+      workExpCount: resumeData.workExperience?.length || 0,
+      projectsCount: resumeData.projects?.length || 0,
+      skillsCount: Object.keys(resumeData.skills || {}).length
+    });
 
     // Validation
     if (!resumeData.name || !resumeData.email) {
+      console.error('❌ Validation failed: Missing name or email');
       return res.status(400).json({
         success: false,
-        message: 'Name and email are required'
+        message: 'Name and email are required',
+        details: {
+          name: resumeData.name ? 'provided' : 'missing',
+          email: resumeData.email ? 'provided' : 'missing'
+        }
       });
     }
 
     if (!resumeData.workExperience || resumeData.workExperience.length === 0) {
+      console.error('❌ Validation failed: Missing work experience');
       return res.status(400).json({
         success: false,
         message: 'At least one work experience is required'
       });
     }
 
-    // Prepare data for PDF generation
+    // Prepare data for PDF generation with safety checks
     const pdfData = {
       // Contact Info
-      name: resumeData.name,
-      email: resumeData.email,
+      name: resumeData.name || 'Unknown',
+      email: resumeData.email || '',
       phone: resumeData.phone || '',
       location: resumeData.location || '',
       linkedin: resumeData.linkedin || '',
@@ -128,7 +181,7 @@ const createResumeFromProfile = async (req, res) => {
       // Professional Summary
       summary: resumeData.professionalSummary || '',
 
-      // Education
+      // Education - with null safety
       education: resumeData.education ? [
         {
           degree: resumeData.education,
@@ -137,81 +190,158 @@ const createResumeFromProfile = async (req, res) => {
         }
       ] : [],
 
-      // Work Experience
-      experience: resumeData.workExperience.map(exp => ({
-        company: exp.company,
-        position: exp.position,
-        duration: exp.current
-          ? `${exp.startDate} - Present`
-          : `${exp.startDate} - ${exp.endDate}`,
-        achievements: exp.achievements.filter(a => a.trim() !== '')
-      })),
+      // Work Experience - with null/undefined safety
+      experience: Array.isArray(resumeData.workExperience)
+        ? resumeData.workExperience.map(exp => ({
+            company: exp.company || 'Company',
+            position: exp.position || 'Position',
+            duration: exp.current
+              ? `${exp.startDate || 'Start'} - Present`
+              : `${exp.startDate || 'Start'} - ${exp.endDate || 'End'}`,
+            achievements: Array.isArray(exp.achievements)
+              ? exp.achievements.filter(a => a && a.trim() !== '')
+              : []
+          }))
+        : [],
 
-      // Projects
-      projects: resumeData.projects.map(proj => ({
-        name: proj.name,
-        link: proj.link || '',
-        technologies: proj.technologies,
-        description: proj.description.filter(d => d.trim() !== '')
-      })),
+      // Projects - with null/undefined safety
+      projects: Array.isArray(resumeData.projects)
+        ? resumeData.projects.map(proj => ({
+            name: proj.name || 'Project',
+            link: proj.link || '',
+            technologies: proj.technologies || '',
+            description: Array.isArray(proj.description)
+              ? proj.description.filter(d => d && d.trim() !== '')
+              : []
+          }))
+        : [],
 
       // Skills
       skills: [],
 
-      // Extra-curricular
-      extraCurricular: resumeData.extraCurricular.filter(item => item.trim() !== '')
+      // Extra-curricular - with null/undefined safety
+      extraCurricular: Array.isArray(resumeData.extraCurricular)
+        ? resumeData.extraCurricular.filter(item => item && item.trim() !== '')
+        : []
     };
 
-    // Format skills by category
+    // Format skills by category with null safety
     const skillCategories = [];
-    if (resumeData.skills.frontend?.length) {
-      skillCategories.push({ category: 'Frontend', skills: resumeData.skills.frontend });
+    const skills = resumeData.skills || {};
+
+    if (Array.isArray(skills.frontend) && skills.frontend.length) {
+      skillCategories.push({ category: 'Frontend', skills: skills.frontend.filter(s => s) });
     }
-    if (resumeData.skills.backend?.length) {
-      skillCategories.push({ category: 'Backend', skills: resumeData.skills.backend });
+    if (Array.isArray(skills.backend) && skills.backend.length) {
+      skillCategories.push({ category: 'Backend', skills: skills.backend.filter(s => s) });
     }
-    if (resumeData.skills.database?.length) {
-      skillCategories.push({ category: 'Database', skills: resumeData.skills.database });
+    if (Array.isArray(skills.database) && skills.database.length) {
+      skillCategories.push({ category: 'Database', skills: skills.database.filter(s => s) });
     }
-    if (resumeData.skills.languages?.length) {
-      skillCategories.push({ category: 'Languages', skills: resumeData.skills.languages });
+    if (Array.isArray(skills.languages) && skills.languages.length) {
+      skillCategories.push({ category: 'Languages', skills: skills.languages.filter(s => s) });
     }
-    if (resumeData.skills.softSkills?.length) {
-      skillCategories.push({ category: 'Soft Skills', skills: resumeData.skills.softSkills });
+    if (Array.isArray(skills.softSkills) && skills.softSkills.length) {
+      skillCategories.push({ category: 'Soft Skills', skills: skills.softSkills.filter(s => s) });
     }
 
     pdfData.skills = skillCategories;
 
+    console.log('✅ Resume data prepared:', {
+      experienceCount: pdfData.experience.length,
+      projectsCount: pdfData.projects.length,
+      skillCategories: pdfData.skills.length,
+      extraCurricularCount: pdfData.extraCurricular.length
+    });
+
     console.log('🔨 Generating PDF with resume data and template:', templateId);
 
-    // Generate PDF using the resume PDF generator service with selected template
-    const pdfBuffer = await resumePDFGenerator.createResumePDF(pdfData, templateId);
+    // Generate PDF with timeout protection (30 seconds)
+    let pdfBuffer;
+    try {
+      pdfBuffer = await Promise.race([
+        resumePDFGenerator.createResumePDF(pdfData, templateId),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('PDF generation timeout after 30 seconds')), 30000)
+        )
+      ]);
+
+      console.log(`✅ PDF generated successfully in ${Date.now() - startTime}ms (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
+    } catch (pdfError) {
+      console.error('❌ PDF generation failed:', pdfError.message);
+      throw new Error(`PDF generation failed: ${pdfError.message}`);
+    }
 
     console.log('📤 Uploading PDF to Firebase Storage...');
 
-    // Upload to Firebase Storage
-    const fileName = `${resumeData.name.replace(/\s+/g, '_')}_Resume_${Date.now()}.pdf`;
-    const uploadResult = await firebaseStorage.uploadResume(
-      pdfBuffer,
-      fileName,
-      userId
-    );
+    // Upload to Firebase Storage with timeout protection (60 seconds)
+    let uploadResult;
+    try {
+      const fileName = `${resumeData.name.replace(/\s+/g, '_')}_Resume_${Date.now()}.pdf`;
 
-    console.log('✅ Resume created and uploaded successfully');
+      uploadResult = await Promise.race([
+        firebaseStorage.uploadResume(pdfBuffer, fileName, userId),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Firebase upload timeout after 60 seconds')), 60000)
+        )
+      ]);
 
-    res.json({
-      success: true,
-      message: 'Resume created successfully!',
-      downloadUrl: uploadResult.firebaseUrl,
-      fileName: fileName
-    });
+      console.log(`✅ Resume uploaded successfully in ${Date.now() - startTime}ms total`);
+      console.log('📦 Download URL:', uploadResult.firebaseUrl);
+
+      res.json({
+        success: true,
+        message: 'Resume created successfully!',
+        downloadUrl: uploadResult.firebaseUrl,
+        fileName: fileName,
+        timeMs: Date.now() - startTime
+      });
+    } catch (uploadError) {
+      console.error('❌ Firebase upload failed:', uploadError.message);
+      throw new Error(`Firebase upload failed: ${uploadError.message}`);
+    }
 
   } catch (error) {
-    console.error('❌ Error creating resume:', error);
+    const errorTime = Date.now() - startTime;
+    console.error(`❌ Error creating resume after ${errorTime}ms:`, {
+      message: error.message,
+      stack: error.stack?.substring(0, 200)
+    });
+
+    // Determine specific error type and return appropriate status code
+    if (error.message.includes('timeout')) {
+      return res.status(504).json({
+        success: false,
+        message: 'Resume generation timeout. Please try again.',
+        error: error.message,
+        timeMs: errorTime
+      });
+    }
+
+    if (error.message.includes('Firebase') || error.message.includes('storage')) {
+      return res.status(503).json({
+        success: false,
+        message: 'Storage service temporarily unavailable. Please try again.',
+        error: error.message,
+        timeMs: errorTime
+      });
+    }
+
+    if (error.message.includes('PDF generation')) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate PDF. Please check your resume data.',
+        error: error.message,
+        timeMs: errorTime
+      });
+    }
+
+    // Generic error
     res.status(500).json({
       success: false,
-      message: 'Failed to create resume',
-      error: error.message
+      message: 'Failed to create resume. Please try again.',
+      error: error.message,
+      timeMs: errorTime
     });
   }
 };

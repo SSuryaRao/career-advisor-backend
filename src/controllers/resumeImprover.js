@@ -489,11 +489,23 @@ const getImprovementStatus = async (req, res) => {
       });
     }
 
+    // Transform improvement data to ensure URLs are absolute
+    let improvementData = null;
+    if (resume.improvement) {
+      improvementData = { ...resume.improvement.toObject() };
+
+      // Fix relative URLs by converting to backend URL
+      if (improvementData.improvedResumeUrl && improvementData.improvedResumeUrl.startsWith('/uploads/')) {
+        const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+        improvementData.improvedResumeUrl = `${backendUrl}${improvementData.improvedResumeUrl}`;
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: {
         hasImprovement: !!resume.improvement,
-        improvement: resume.improvement || null,
+        improvement: improvementData,
         originalScore: resume.atsAnalysis?.overallScore || 0
       }
     });

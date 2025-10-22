@@ -9,6 +9,16 @@ const connectDB = async () => {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      // Performance optimization settings
+      serverSelectionTimeoutMS: 5000, // Timeout for initial server selection (5 seconds)
+      socketTimeoutMS: 45000, // Timeout for socket inactivity (45 seconds)
+      connectTimeoutMS: 10000, // Timeout for initial connection (10 seconds)
+      maxPoolSize: 10, // Maximum number of connections in the pool
+      minPoolSize: 2, // Minimum number of connections to maintain
+      maxIdleTimeMS: 30000, // Close connections idle for more than 30 seconds
+      // Retry settings
+      retryWrites: true,
+      retryReads: true,
     });
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
@@ -20,6 +30,9 @@ const connectDB = async () => {
     mongoose.connection.on('disconnected', () => {
       console.log('⚠️ MongoDB disconnected');
     });
+
+    // Set default query timeout for all queries
+    mongoose.set('maxTimeMS', 10000); // 10 second max for any query
 
     process.on('SIGINT', async () => {
       await mongoose.connection.close();

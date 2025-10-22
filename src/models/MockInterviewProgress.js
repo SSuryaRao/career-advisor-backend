@@ -165,6 +165,11 @@ mockInterviewProgressSchema.pre('save', function(next) {
   next();
 });
 
+// Additional indexes for performance optimization
+mockInterviewProgressSchema.index({ userId: 1, updatedAt: -1 });
+mockInterviewProgressSchema.index({ 'aptitudeTests.completedAt': -1 });
+mockInterviewProgressSchema.index({ 'interviewSessions.completedAt': -1 });
+
 // Static method to find or create by user ID
 mockInterviewProgressSchema.statics.findOrCreateByUserId = async function(userId) {
   let progress = await this.findOne({ userId });

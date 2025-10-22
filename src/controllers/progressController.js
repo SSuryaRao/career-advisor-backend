@@ -1,6 +1,7 @@
 const UserProgress = require('../models/UserProgress');
 const User = require('../models/User');
 const { featuredResources } = require('../data/resources');
+const cache = require('../utils/cache');
 
 // Get user progress
 const getUserProgress = async (req, res) => {
@@ -82,9 +83,14 @@ const completeResource = async (req, res) => {
     
     const progress = await UserProgress.findOrCreateByUserId(mongoUserId);
     await progress.completeResource(parseInt(resourceId), resource.category, timeSpent, rating, notes);
-    
+
     const summary = progress.getProgressSummary();
-    
+
+    // Invalidate dashboard cache for this user
+    const cacheKey = `dashboard:${userId}`;
+    cache.delete(cacheKey);
+    console.log(`🗑️ Dashboard cache invalidated for: ${userId}`);
+
     // Log activity in user model if user exists
     if (user && user.logActivity) {
       await user.logActivity('resource_completed', {
@@ -94,7 +100,7 @@ const completeResource = async (req, res) => {
         timeSpent
       });
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Resource marked as completed',
@@ -154,9 +160,14 @@ const uncompleteResource = async (req, res) => {
     
     const progress = await UserProgress.findOrCreateByUserId(mongoUserId);
     await progress.uncompleteResource(parseInt(resourceId), resource.category);
-    
+
     const summary = progress.getProgressSummary();
-    
+
+    // Invalidate dashboard cache for this user
+    const cacheKey = `dashboard:${userId}`;
+    cache.delete(cacheKey);
+    console.log(`🗑️ Dashboard cache invalidated for: ${userId}`);
+
     // Log activity in user model if user exists
     if (user && user.logActivity) {
       await user.logActivity('resource_uncompleted', {
@@ -165,7 +176,7 @@ const uncompleteResource = async (req, res) => {
         category: resource.category
       });
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Resource marked as uncompleted',
@@ -515,6 +526,21 @@ const getDashboardSummary = async (req, res) => {
   try {
     const { userId } = req.params;
 
+    // Check cache first (2 minute TTL)
+    const cacheKey = `dashboard:${userId}`;
+    const cachedData = cache.get(cacheKey);
+
+    if (cachedData) {
+      console.log(`📦 Cache hit for dashboard: ${userId}`);
+      return res.status(200).json({
+        success: true,
+        data: cachedData,
+        cached: true
+      });
+    }
+
+    console.log(`🔍 Cache miss for dashboard: ${userId}, fetching from DB`);
+
     // Try to find user by Firebase UID first
     let mongoUserId = userId;
     try {
@@ -528,13 +554,32 @@ const getDashboardSummary = async (req, res) => {
       console.log(`Error finding user by Firebase UID ${userId}:`, error.message);
     }
 
-    // Get resource progress
-    const resourceProgress = await UserProgress.findOrCreateByUserId(mongoUserId);
-    const resourceSummary = resourceProgress.getProgressSummary();
-
-    // Get roadmap progress
+    // PERFORMANCE OPTIMIZATION: Fetch all data in parallel instead of sequential
     const RoadmapProgress = require('../models/RoadmapProgress');
-    const roadmaps = await RoadmapProgress.find({ userId: mongoUserId }).sort({ updatedAt: -1 });
+    const MockInterviewProgress = require('../models/MockInterviewProgress');
+
+    let resourceProgress, roadmaps, mockInterviewProgress;
+
+    try {
+      [resourceProgress, roadmaps, mockInterviewProgress] = await Promise.all([
+        UserProgress.findOrCreateByUserId(mongoUserId),
+        RoadmapProgress.find({ userId: mongoUserId }).sort({ updatedAt: -1 }).lean().maxTimeMS(5000),
+        MockInterviewProgress.findOrCreateByUserId(mongoUserId)
+      ]);
+    } catch (dbError) {
+      // Handle database timeout or connection errors
+      console.error('Database query timeout or error:', dbError.message);
+
+      // Return a graceful error response
+      return res.status(503).json({
+        success: false,
+        message: 'Dashboard is temporarily unavailable. Please try again in a moment.',
+        error: 'Database timeout',
+        retryAfter: 5 // seconds
+      });
+    }
+
+    const resourceSummary = resourceProgress.getProgressSummary();
 
     let totalRoadmapMilestones = 0;
     let completedRoadmapMilestones = 0;
@@ -559,9 +604,6 @@ const getDashboardSummary = async (req, res) => {
       };
     });
 
-    // Get mock interview progress
-    const MockInterviewProgress = require('../models/MockInterviewProgress');
-    const mockInterviewProgress = await MockInterviewProgress.findOrCreateByUserId(mongoUserId);
     const mockInterviewStats = mockInterviewProgress.getStats();
 
     // Calculate overall progress metrics
@@ -644,9 +686,14 @@ const getDashboardSummary = async (req, res) => {
       achievements: resourceProgress.achievements.slice(-5).reverse()
     };
 
+    // Cache the result for 2 minutes (120000ms)
+    cache.set(cacheKey, summary, 120000);
+    console.log(`💾 Dashboard data cached for: ${userId}`);
+
     res.status(200).json({
       success: true,
-      data: summary
+      data: summary,
+      cached: false
     });
   } catch (error) {
     console.error('Error fetching dashboard summary:', error);

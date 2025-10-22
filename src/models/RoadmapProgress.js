@@ -44,5 +44,7 @@ roadmapProgressSchema.pre('save', function(next) {
 
 // Create compound index for efficient queries
 roadmapProgressSchema.index({ userId: 1, careerDomain: 1, skillLevel: 1 }, { unique: true });
+// Additional index for date-range queries
+roadmapProgressSchema.index({ userId: 1, updatedAt: -1 });
 
 module.exports = mongoose.model('RoadmapProgress', roadmapProgressSchema);

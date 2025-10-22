@@ -53,8 +53,13 @@ app.use(helmet());
 app.use(morgan('combined'));
 app.use(limiter);
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://career-craft-ai-three.vercel.app', 'https://career-advisor-backend-y6sr.onrender.com'] 
+  origin: process.env.NODE_ENV === 'production'
+    ? [
+        'https://career-craft-ai-three.vercel.app',
+        'https://career-advisor-backend-y6sr.onrender.com',
+        'https://careercraft-frontend-1030709276859.us-central1.run.app',
+        'https://careercraft-backend-1030709276859.us-central1.run.app'
+      ]
     : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
