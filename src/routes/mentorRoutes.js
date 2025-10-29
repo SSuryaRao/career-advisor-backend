@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mentorController = require('../controllers/mentorController');
 const { authenticateUser } = require('../middleware/authMiddleware');
+const { checkUsageLimit, incrementUsage } = require('../middleware/usageLimits');
 
 // All routes require authentication
 router.use(authenticateUser);
@@ -11,7 +12,11 @@ router.use(authenticateUser);
  * @desc    Send a message to AI mentor and get response
  * @access  Private
  */
-router.post('/message', mentorController.sendMessage);
+router.post('/message',
+  checkUsageLimit('aiMentorMessages'),
+  mentorController.sendMessage,
+  incrementUsage
+);
 
 /**
  * @route   GET /api/mentor/conversations
@@ -39,7 +44,11 @@ router.get('/progress', mentorController.getProgressAnalysis);
  * @desc    Generate personalized learning path
  * @access  Private
  */
-router.post('/learning-path', mentorController.generateLearningPath);
+router.post('/learning-path',
+  checkUsageLimit('learningPaths'),
+  mentorController.generateLearningPath,
+  incrementUsage
+);
 
 /**
  * @route   POST /api/mentor/career-guidance

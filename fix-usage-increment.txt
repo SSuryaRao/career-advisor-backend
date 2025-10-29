@@ -1,0 +1,14 @@
+Controllers that need incrementUsageForRequest added BEFORE sending response:
+
+1. mentorController.js - sendMessage (line ~55)
+2. mentorController.js - generateLearningPath (line ~261)
+3. recommendationController.js - generateRecommendations (need to check)
+4. roadmapController.js - generateRoadmap (need to check)
+5. jobController.js - getRecommendations (need to check)
+
+Pattern to add:
+    // Increment usage BEFORE sending response
+    const { incrementUsageForRequest } = require('../middleware/usageLimits');
+    await incrementUsageForRequest(req);
+
+Add this just before res.json() or res.status(200).json()

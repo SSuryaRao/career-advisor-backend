@@ -260,6 +260,10 @@ const uploadAndAnalyzeResume = async (req, res) => {
         });
       }
 
+      // Increment usage BEFORE sending response
+      const { incrementUsageForRequest } = require('../middleware/usageLimits');
+      await incrementUsageForRequest(req);
+
       res.status(200).json({
         success: true,
         message: 'Resume analyzed successfully',

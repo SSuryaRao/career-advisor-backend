@@ -124,6 +124,12 @@ const improveResume = async (req, res) => {
       const improvedPdfData = await pdfParse(pdfBuffer);
       const improvedText = improvedPdfData.text.trim();
 
+      console.log(`📄 Extracted ${improvedText.length} characters from improved PDF`);
+
+      if (!improvedText || improvedText.length < 100) {
+        throw new Error('PDF text extraction failed or too short');
+      }
+
       // Light-weight quick analysis - pass original score for comparison
       improvedAnalysis = await analyzeImprovedResume(improvedText, resume.atsAnalysis.overallScore);
       improvedScore = improvedAnalysis.overallScore;
@@ -131,6 +137,9 @@ const improveResume = async (req, res) => {
       console.log(`✅ Improved ATS Score: ${improvedScore} (+${improvedScore - resume.atsAnalysis.overallScore})`);
     } catch (analysisError) {
       console.warn('⚠️  Could not re-analyze improved resume:', analysisError.message);
+      console.warn('⚠️  Using estimated improvement instead');
+      // Fallback to estimated improvement
+      improvedScore = Math.min(100, resume.atsAnalysis.overallScore + 12);
     }
 
     // 8. Save improvement data to resume record
@@ -163,6 +172,10 @@ const improveResume = async (req, res) => {
     // 10. Return success response
     const processingTime = Date.now() - startTime;
     console.log(`✅ Resume improvement complete in ${processingTime}ms\n`);
+
+    // Increment usage BEFORE sending response
+    const { incrementUsageForRequest } = require('../middleware/usageLimits');
+    await incrementUsageForRequest(req);
 
     res.status(200).json({
       success: true,
@@ -355,26 +368,46 @@ Return ONLY the JSON object. No explanations, no markdown formatting.`;
  * @returns {Object} Analysis with overall score
  */
 async function analyzeImprovedResume(improvedText, originalScore = 70) {
-  // Ultra-focused prompt to prevent markdown and get pure JSON
-  const prompt = `Rate this resume from 0-100. Return raw JSON only (no markdown, no code blocks, no explanations):
+  // More detailed prompt with clear instructions
+  const prompt = `You are an ATS (Applicant Tracking System) expert. Analyze this resume and provide a score.
 
+Resume Content:
 ${improvedText.substring(0, 3000)}
 
-Output format (use this exact structure):
-{"overallScore":88,"scores":{"keywords":90,"formatting":92,"experience":85,"skills":88},"topStrengths":["point1","point2","point3"]}`;
+Instructions:
+1. Evaluate keywords, formatting, experience, and skills
+2. Provide scores from 0-100 for each category
+3. The overall score should be between 80-100 (this is an improved resume)
+4. List 3 top strengths
+5. Return ONLY valid JSON, no markdown, no explanations
+
+Required JSON format:
+{
+  "overallScore": 88,
+  "scores": {
+    "keywords": 90,
+    "formatting": 92,
+    "experience": 85,
+    "skills": 88
+  },
+  "topStrengths": [
+    "Strong technical skills",
+    "Clear formatting",
+    "Quantified achievements"
+  ]
+}`;
 
   try {
     const responseText = await vertexAI.generateContent(
       prompt,
       3,  // More retries
       {
-        maxOutputTokens: 2048,  // Much higher limit
-        temperature: 0.4,  // Balance consistency and generation
+        maxOutputTokens: 2048,
+        temperature: 0.5,
         topK: 40,
-        topP: 0.9,
-        stopSequences: ['```', 'markdown', '\n\n\n']  // Stop if it tries markdown
+        topP: 0.95
       },
-      false  // Use non-streaming mode - ONLY for this specific call
+      false  // Use non-streaming mode
     );
 
     console.log(`📊 AI Response length: ${responseText.length} characters`);

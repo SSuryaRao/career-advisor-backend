@@ -1,0 +1,8 @@
+# Artillery ignore file
+node_modules/
+.git/
+.env
+credentials/
+uploads/
+logs/
+*.log

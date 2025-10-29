@@ -85,36 +85,61 @@ class InterviewAnalysisService {
       let videoAnalysis = null;
       let responseText = '';
 
-      // Step 1: Transcribe audio
-      if (audioBuffer) {
-        console.log('🎤 Transcribing audio...');
-        transcriptionResult = await speechToText.transcribeAudio(
-          audioBuffer,
-          'WEBM_OPUS',
-          48000,
-          'en-US'
-        );
-        responseText = transcriptionResult.transcript;
+      // Step 1 & 2: Run transcription and video analysis in parallel for better performance
+      console.log('⚡ Running transcription and video analysis in parallel...');
 
-        // Analyze speech patterns
-        speechPatterns = speechToText.analyzeSpeechPatterns(transcriptionResult);
-        console.log(`✅ Transcription complete. Word count: ${speechPatterns.totalWords}`);
+      const parallelTasks = [];
+
+      // Add transcription task with domain-specific vocabulary
+      if (audioBuffer) {
+        parallelTasks.push(
+          speechToText.transcribeAudio(
+            audioBuffer,
+            'WEBM_OPUS',
+            48000,
+            'en-US',
+            domainId // Pass domain ID for context-specific vocabulary hints
+          ).then(result => ({ type: 'transcription', result }))
+          .catch(error => ({ type: 'transcription', error }))
+        );
       }
 
-      // Step 2: Analyze video (if provided)
+      // Add video analysis task
       if (videoBuffer && cloudStorage.isReady()) {
-        console.log('🎥 Analyzing video...');
-        try {
-          videoAnalysis = await videoIntelligence.analyzeVideoFromBuffer(
+        parallelTasks.push(
+          videoIntelligence.analyzeVideoFromBuffer(
             videoBuffer,
             cloudStorage,
             userId,
             sessionId
-          );
-          console.log('✅ Video analysis complete');
-        } catch (error) {
-          console.warn('⚠️ Video analysis failed, continuing without it:', error.message);
-          videoAnalysis = null;
+          ).then(result => ({ type: 'video', result }))
+          .catch(error => ({ type: 'video', error }))
+        );
+      }
+
+      // Wait for all tasks to complete
+      const results = await Promise.all(parallelTasks);
+
+      // Process results
+      for (const taskResult of results) {
+        if (taskResult.type === 'transcription') {
+          if (taskResult.error) {
+            console.error('❌ Transcription failed:', taskResult.error.message);
+            throw taskResult.error;
+          }
+          console.log('🎤 Transcription complete');
+          transcriptionResult = taskResult.result;
+          responseText = transcriptionResult.transcript;
+          speechPatterns = speechToText.analyzeSpeechPatterns(transcriptionResult);
+          console.log(`✅ Transcription analyzed. Word count: ${speechPatterns.totalWords}`);
+        } else if (taskResult.type === 'video') {
+          if (taskResult.error) {
+            console.warn('⚠️ Video analysis failed, continuing without it:', taskResult.error.message);
+            videoAnalysis = null;
+          } else {
+            console.log('🎥 Video analysis complete');
+            videoAnalysis = taskResult.result;
+          }
         }
       }
 
@@ -171,7 +196,7 @@ class InterviewAnalysisService {
           text: responseText,
           confidence: transcriptionResult?.confidence || 0,
           wordCount: transcriptionResult?.wordCount || 0,
-          duration: transcriptionResult?.duration || 0
+          duration: parseFloat(transcriptionResult?.duration) || 0
         },
         overallAssessment: structuredAnalysis.overall,
         timestamp: new Date().toISOString()

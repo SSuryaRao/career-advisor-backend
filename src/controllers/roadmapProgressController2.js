@@ -1,13 +1,13 @@
-const Roadmap = require('../models/Roadmap');
+const RoadmapProgress = require('../models/RoadmapProgress');
 const User = require('../models/User');
 
 class RoadmapProgressController {
-  
+
   // Save or update roadmap progress
   async saveRoadmapProgress(req, res) {
     try {
       const { userId, domain, skillLevel, completedMilestones, roadmapData, title } = req.body;
-      
+
       if (!userId || !domain || !skillLevel || !roadmapData) {
         return res.status(400).json({
           success: false,
@@ -15,38 +15,41 @@ class RoadmapProgressController {
         });
       }
 
+      // Convert Firebase UID to MongoDB ObjectId
+      let mongoUserId = userId;
+      try {
+        const user = await User.findByFirebaseUid(userId);
+        if (user) {
+          mongoUserId = user._id.toString();
+        }
+      } catch (error) {
+        console.log(`Error finding user by Firebase UID ${userId}:`, error.message);
+      }
+
       // Find existing roadmap or create new one
-      let roadmap = await Roadmap.findByUserAndCriteria(userId, domain, skillLevel);
+      let roadmap = await RoadmapProgress.findOne({
+        userId: mongoUserId,
+        careerDomain: domain,
+        skillLevel
+      });
       
       if (roadmap) {
         // Update existing roadmap
         roadmap.completedMilestones = completedMilestones || [];
         roadmap.roadmapData = roadmapData;
-        roadmap.title = title || roadmapData.domain || domain;
-        
-        // Update progress object
-        const progress = {};
-        (completedMilestones || []).forEach(milestone => {
-          progress[milestone.milestoneId] = true;
-        });
-        roadmap.progress = progress;
-        
+        roadmap.updatedAt = new Date();
+
         await roadmap.save();
       } else {
         // Create new roadmap
-        const progress = {};
-        (completedMilestones || []).forEach(milestone => {
-          progress[milestone.milestoneId] = true;
-        });
-
-        roadmap = await Roadmap.create({
-          userId,
-          domain,
+        roadmap = await RoadmapProgress.create({
+          userId: mongoUserId,
+          careerDomain: domain,
           skillLevel,
-          title: title || roadmapData.domain || domain,
           completedMilestones: completedMilestones || [],
           roadmapData,
-          progress
+          createdAt: new Date(),
+          updatedAt: new Date()
         });
       }
 
@@ -70,7 +73,7 @@ class RoadmapProgressController {
   async getRoadmapProgress(req, res) {
     try {
       const { userId, domain, skillLevel } = req.query;
-      
+
       if (!userId) {
         return res.status(400).json({
           success: false,
@@ -78,11 +81,22 @@ class RoadmapProgressController {
         });
       }
 
-      let query = { userId, isActive: true };
-      if (domain) query.domain = domain;
+      // Convert Firebase UID to MongoDB ObjectId
+      let mongoUserId = userId;
+      try {
+        const user = await User.findByFirebaseUid(userId);
+        if (user) {
+          mongoUserId = user._id.toString();
+        }
+      } catch (error) {
+        console.log(`Error finding user by Firebase UID ${userId}:`, error.message);
+      }
+
+      let query = { userId: mongoUserId };
+      if (domain) query.careerDomain = domain;
       if (skillLevel) query.skillLevel = skillLevel;
 
-      const roadmaps = await Roadmap.find(query).sort({ lastUpdated: -1 });
+      const roadmaps = await RoadmapProgress.find(query).sort({ updatedAt: -1 });
 
       res.status(200).json({
         success: true,
@@ -103,11 +117,21 @@ class RoadmapProgressController {
   async getUserRoadmaps(req, res) {
     try {
       const { uid } = req.user;
-      
-      const roadmaps = await Roadmap.find({ 
-        userId: uid, 
-        isActive: true 
-      }).sort({ lastUpdated: -1 });
+
+      // Convert Firebase UID to MongoDB ObjectId
+      let mongoUserId = uid;
+      try {
+        const user = await User.findByFirebaseUid(uid);
+        if (user) {
+          mongoUserId = user._id.toString();
+        }
+      } catch (error) {
+        console.log(`Error finding user by Firebase UID ${uid}:`, error.message);
+      }
+
+      const roadmaps = await RoadmapProgress.find({
+        userId: mongoUserId
+      }).sort({ updatedAt: -1 });
 
       res.status(200).json({
         success: true,
@@ -130,10 +154,20 @@ class RoadmapProgressController {
       const { roadmapId, milestoneId, milestoneTitle, isCompleted } = req.body;
       const { uid } = req.user;
 
-      const roadmap = await Roadmap.findOne({ 
-        roadmapId, 
-        userId: uid,
-        isActive: true 
+      // Convert Firebase UID to MongoDB ObjectId
+      let mongoUserId = uid;
+      try {
+        const user = await User.findByFirebaseUid(uid);
+        if (user) {
+          mongoUserId = user._id.toString();
+        }
+      } catch (error) {
+        console.log(`Error finding user by Firebase UID ${uid}:`, error.message);
+      }
+
+      const roadmap = await RoadmapProgress.findOne({
+        _id: roadmapId,
+        userId: mongoUserId
       });
 
       if (!roadmap) {
@@ -144,10 +178,22 @@ class RoadmapProgressController {
       }
 
       if (isCompleted) {
-        await roadmap.markMilestoneCompleted(milestoneId, milestoneTitle);
+        // Add milestone if not already completed
+        const existing = roadmap.completedMilestones.find(m => m.milestoneId === milestoneId);
+        if (!existing) {
+          roadmap.completedMilestones.push({
+            milestoneId,
+            completedAt: new Date()
+          });
+        }
       } else {
-        await roadmap.markMilestoneIncomplete(milestoneId);
+        // Remove milestone
+        roadmap.completedMilestones = roadmap.completedMilestones.filter(
+          m => m.milestoneId !== milestoneId
+        );
       }
+
+      await roadmap.save();
 
       res.status(200).json({
         success: true,
@@ -170,26 +216,47 @@ class RoadmapProgressController {
     try {
       const { uid } = req.user;
 
-      const roadmaps = await Roadmap.find({ 
-        userId: uid, 
-        isActive: true 
+      // Convert Firebase UID to MongoDB ObjectId
+      let mongoUserId = uid;
+      try {
+        const user = await User.findByFirebaseUid(uid);
+        if (user) {
+          mongoUserId = user._id.toString();
+        }
+      } catch (error) {
+        console.log(`Error finding user by Firebase UID ${uid}:`, error.message);
+      }
+
+      const roadmaps = await RoadmapProgress.find({
+        userId: mongoUserId
+      });
+
+      // Calculate completion percentages
+      const roadmapsWithProgress = roadmaps.map(r => {
+        const totalMilestones = r.roadmapData?.stages?.reduce(
+          (total, stage) => total + (stage.milestones?.length || 0), 0
+        ) || 0;
+        const completedPercentage = totalMilestones > 0
+          ? Math.round((r.completedMilestones.length / totalMilestones) * 100)
+          : 0;
+        return { ...r.toObject(), completedPercentage, totalMilestones };
       });
 
       const stats = {
-        totalRoadmaps: roadmaps.length,
-        completedRoadmaps: roadmaps.filter(r => r.completedPercentage === 100).length,
-        inProgressRoadmaps: roadmaps.filter(r => r.completedPercentage > 0 && r.completedPercentage < 100).length,
-        totalMilestonesCompleted: roadmaps.reduce((acc, r) => acc + r.completedMilestones.length, 0),
-        averageProgress: roadmaps.length > 0 
-          ? Math.round(roadmaps.reduce((acc, r) => acc + r.completedPercentage, 0) / roadmaps.length)
+        totalRoadmaps: roadmapsWithProgress.length,
+        completedRoadmaps: roadmapsWithProgress.filter(r => r.completedPercentage === 100).length,
+        inProgressRoadmaps: roadmapsWithProgress.filter(r => r.completedPercentage > 0 && r.completedPercentage < 100).length,
+        totalMilestonesCompleted: roadmapsWithProgress.reduce((acc, r) => acc + r.completedMilestones.length, 0),
+        averageProgress: roadmapsWithProgress.length > 0
+          ? Math.round(roadmapsWithProgress.reduce((acc, r) => acc + r.completedPercentage, 0) / roadmapsWithProgress.length)
           : 0,
-        recentActivity: roadmaps
+        recentActivity: roadmapsWithProgress
           .filter(r => r.completedMilestones.length > 0)
-          .sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated))
+          .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
           .slice(0, 5)
           .map(r => ({
-            roadmapTitle: r.title,
-            domain: r.domain,
+            roadmapTitle: r.roadmapData?.domain || r.careerDomain,
+            domain: r.careerDomain,
             lastMilestone: r.completedMilestones[r.completedMilestones.length - 1],
             progress: r.completedPercentage
           }))
@@ -216,9 +283,20 @@ class RoadmapProgressController {
       const { roadmapId } = req.params;
       const { uid } = req.user;
 
-      const roadmap = await Roadmap.findOne({ 
-        roadmapId, 
-        userId: uid 
+      // Convert Firebase UID to MongoDB ObjectId
+      let mongoUserId = uid;
+      try {
+        const user = await User.findByFirebaseUid(uid);
+        if (user) {
+          mongoUserId = user._id.toString();
+        }
+      } catch (error) {
+        console.log(`Error finding user by Firebase UID ${uid}:`, error.message);
+      }
+
+      const roadmap = await RoadmapProgress.findOne({
+        _id: roadmapId,
+        userId: mongoUserId
       });
 
       if (!roadmap) {
@@ -228,19 +306,19 @@ class RoadmapProgressController {
         });
       }
 
-      roadmap.isActive = false;
-      await roadmap.save();
+      // Delete the roadmap entirely
+      await RoadmapProgress.deleteOne({ _id: roadmapId });
 
       res.status(200).json({
         success: true,
-        message: 'Roadmap deactivated successfully'
+        message: 'Roadmap deleted successfully'
       });
 
     } catch (error) {
-      console.error('Error deactivating roadmap:', error);
+      console.error('Error deleting roadmap:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to deactivate roadmap',
+        error: 'Failed to delete roadmap',
         message: error.message
       });
     }

@@ -71,7 +71,7 @@ class UserController {
       const updates = req.body;
 
       const allowedFields = [
-        'profile', 'skills', 'preferences', 'notifications'
+        'name', 'profile', 'skills', 'preferences', 'notifications'
       ];
 
       const filteredUpdates = {};

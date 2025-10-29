@@ -109,6 +109,7 @@ jobSchema.index({ title: 'text', description: 'text', company: 'text', tags: 'te
 jobSchema.index({ postedAt: -1 });
 jobSchema.index({ company: 1 });
 jobSchema.index({ tags: 1 });
+jobSchema.index({ location: 1 });
 jobSchema.index({ isActive: 1, postedAt: -1 });
 
 jobSchema.pre('save', function(next) {

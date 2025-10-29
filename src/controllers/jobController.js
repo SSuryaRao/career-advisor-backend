@@ -8,6 +8,7 @@ class JobController {
         page = 1,
         limit = 20,
         search,
+        location,
         tags,
         company,
         jobType,
@@ -27,8 +28,20 @@ class JobController {
         query.postedAt = { $gte: daysAgo };
       }
 
+      // Enhanced search - search in title, company, description, and tags
       if (search) {
-        query.$text = { $search: search };
+        const searchRegex = new RegExp(search, 'i');
+        query.$or = [
+          { title: searchRegex },
+          { company: searchRegex },
+          { description: searchRegex },
+          { tags: { $in: [searchRegex] } }
+        ];
+      }
+
+      // Location filter
+      if (location) {
+        query.location = new RegExp(location, 'i');
       }
 
       if (tags) {
@@ -265,6 +278,10 @@ class JobController {
       console.log(`🎯 Getting job recommendations for user ${firebaseUid}`);
 
       const result = await jobRecommendationService.getRecommendations(firebaseUid, options);
+
+      // Increment usage BEFORE sending response
+      const { incrementUsageForRequest } = require('../middleware/usageLimits');
+      await incrementUsageForRequest(req);
 
       res.status(200).json({
         success: result.success,

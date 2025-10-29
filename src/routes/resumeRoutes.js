@@ -13,6 +13,7 @@ const {
   getImprovementStatus
 } = require('../controllers/resumeImprover');
 const { authenticateUser } = require('../middleware/authMiddleware');
+const { checkUsageLimit, incrementUsage } = require('../middleware/usageLimits');
 
 const router = express.Router();
 
@@ -58,10 +59,12 @@ const analysisRateLimit = rateLimit({
 router.use(authenticateUser);
 
 // Routes
-router.post('/upload', 
-  uploadRateLimit, 
-  upload.single('resume'), 
-  uploadAndAnalyzeResume
+router.post('/upload',
+  uploadRateLimit,
+  checkUsageLimit('resumeAnalysis'), // Check quota BEFORE upload
+  upload.single('resume'),
+  uploadAndAnalyzeResume,
+  incrementUsage // Increment AFTER successful upload
 );
 
 router.get('/history', getResumeHistory);
@@ -73,7 +76,11 @@ router.get('/:resumeId', getResumeAnalysis);
 router.delete('/:resumeId', deleteResume);
 
 // Resume improvement routes
-router.post('/:resumeId/improve', improveResume);
+router.post('/:resumeId/improve',
+  checkUsageLimit('resumeImprovement'),
+  improveResume,
+  incrementUsage
+);
 
 router.get('/:resumeId/improvement', getImprovementStatus);
 

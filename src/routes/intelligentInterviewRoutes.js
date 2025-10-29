@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const { authenticateUser } = require('../middleware/authMiddleware');
+const { checkUsageLimit, incrementUsage } = require('../middleware/usageLimits');
 const {
   getDomains,
   getDomainDetails,
@@ -21,19 +23,26 @@ const upload = multer({
   }
 });
 
-// Get all available interview domains
+// Public routes (no auth needed)
 router.get('/domains', getDomains);
-
-// Get domain details by ID
 router.get('/domains/:domainId', getDomainDetails);
 
-// Generate interview questions
+// Apply authentication to all routes below
+router.use(authenticateUser);
+
+// Generate interview questions (no limit - just generates questions)
 router.post('/generate-questions', generateQuestions);
 
-// Analyze response - Standard mode (text only)
-router.post('/analyze/standard', analyzeResponseStandard);
+// Analyze response - Standard mode (text + audio)
+router.post('/analyze/standard',
+  checkUsageLimit('intelligentInterviewStandard'),
+  analyzeResponseStandard,
+  incrementUsage
+);
 
-// Analyze response - Advanced mode (with audio/video)
+// Analyze response - Advanced mode (VIDEO analysis)
+// NOTE: We check the limit at session START, not per question
+// We increment usage when the FIRST question in a session is analyzed
 router.post(
   '/analyze/advanced',
   upload.fields([
@@ -44,9 +53,10 @@ router.post(
 );
 
 // Start a new interview session
+// We check the limit HERE when starting advanced mode sessions
 router.post('/session/start', startSession);
 
-// Save completed session
+// Save completed session (no limit)
 router.post('/session/save', saveSession);
 
 // Get user's session history

@@ -39,7 +39,7 @@ class JobRecommendationService {
         postedAt: { $gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) } // Last 60 days
       })
       .sort({ postedAt: -1 })
-      .limit(15) // Analyze top 15 recent jobs (reduced to prevent AI response truncation)
+      .limit(8) // Analyze top 8 recent jobs (reduced to prevent MAX_TOKENS truncation)
       .lean();
 
       if (availableJobs.length === 0) {
@@ -173,6 +173,13 @@ class JobRecommendationService {
       const limited = sorted.slice(0, limit);
 
       console.log(`✅ Generated ${limited.length} job recommendations`);
+
+      // If AI returned 0 recommendations, fallback to basic matching
+      if (limited.length === 0) {
+        console.log('⚠️  AI returned 0 recommendations, falling back to basic matching');
+        return this.basicJobMatching(userData, jobs, options);
+      }
+
       return limited;
 
     } catch (error) {
@@ -198,8 +205,8 @@ class JobRecommendationService {
       id: job._id.toString(),
       title: job.title,
       company: job.company,
-      description: job.description?.substring(0, 300), // Limit description to 300 chars
-      tags: job.tags?.slice(0, 10) || [], // Max 10 tags
+      description: job.description?.substring(0, 150), // Limit description to 150 chars
+      tags: job.tags?.slice(0, 5) || [], // Max 5 tags
       jobType: job.jobType,
       experienceLevel: job.experienceLevel,
       location: job.location
@@ -243,14 +250,12 @@ Return ONLY a valid JSON array with this exact format (no markdown, no extra tex
 
 CRITICAL RULES:
 - matchScore: 0-100 (higher is better)
-- Only recommend jobs with matchScore >= 50
-- Recommend ALL jobs that score >= 50 (up to ${simplifiedJobs.length} jobs)
-- Keep "reason" under 100 characters - be VERY concise!
-- Keep "careerFit" under 80 characters
-- List max 3 skillGaps (most important only)
-- List max 3 strengths (most important only)
-- Return COMPLETE valid JSON - do not truncate
-- No markdown, no extra text, ONLY the JSON array`;
+- Be generous with scoring! Give at least 50+ if any relevant match
+- Aim to recommend at least ${Math.min(jobs.length, 5)} jobs
+- Keep "reason" under 60 characters - VERY SHORT!
+- Keep "careerFit" under 50 characters - VERY SHORT!
+- Max 2 skillGaps, max 2 strengths
+- Return ONLY valid JSON array, no markdown, no extra text`;
   }
 
   /**

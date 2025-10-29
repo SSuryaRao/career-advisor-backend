@@ -138,6 +138,10 @@ const analyzeResponseStandard = async (req, res) => {
       expectedKeywords
     });
 
+    // Increment usage BEFORE sending response
+    const { incrementUsageForRequest } = require('../middleware/usageLimits');
+    await incrementUsageForRequest(req);
+
     res.status(200).json({
       success: true,
       data: analysis
@@ -197,6 +201,46 @@ const analyzeResponseAdvanced = async (req, res) => {
       expectedKeywords
     });
 
+    // Increment usage count ONLY ONCE per session (on first question)
+    // Check if this session has already been counted
+    const User = require('../models/User');
+    const UsageQuota = require('../models/UsageQuota');
+
+    const user = await User.findOne({ firebaseUid: req.user.uid });
+
+    if (user && !user.isAdmin) {
+      const userTier = user.subscription?.plan || 'free';
+      const currentMonth = new Date().toISOString().slice(0, 7);
+
+      const quota = await UsageQuota.findOne({ userId: user._id, month: currentMonth });
+
+      if (quota) {
+        // Check if we need to track this session
+        if (!quota.videoSessionsTracked) {
+          quota.videoSessionsTracked = [];
+        }
+
+        // Only increment if this session hasn't been counted yet
+        if (!quota.videoSessionsTracked.includes(sessionId)) {
+          const videoQuota = quota.intelligentInterviewVideo;
+
+          // Only increment if not unlimited
+          if (videoQuota && videoQuota.limit !== -1) {
+            await UsageQuota.findByIdAndUpdate(
+              quota._id,
+              {
+                $inc: { 'intelligentInterviewVideo.used': 1 },
+                $push: { videoSessionsTracked: sessionId }
+              }
+            );
+            console.log(`📊 Usage incremented for session ${sessionId}: intelligentInterviewVideo (${videoQuota.used + 1}/${videoQuota.limit})`);
+          }
+        } else {
+          console.log(`ℹ️ Session ${sessionId} already counted, skipping increment`);
+        }
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: analysis
@@ -230,6 +274,91 @@ const startSession = async (req, res) => {
         success: false,
         message: 'Missing required fields: userId, domainId, level'
       });
+    }
+
+    // Check usage limit for advanced mode (video analysis)
+    if (analysisMode === 'advanced') {
+      console.log('🎥 Advanced mode requested - checking video interview quota...');
+
+      const User = require('../models/User');
+      const UsageQuota = require('../models/UsageQuota');
+      const { TIER_LIMITS } = require('../config/tierLimits');
+
+      // Get user from database
+      const user = await User.findOne({ firebaseUid: req.user.uid });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+      }
+
+      // Check if admin (bypass limits)
+      if (!user.isAdmin) {
+        const userTier = user.subscription?.plan || 'free';
+        const currentMonth = new Date().toISOString().slice(0, 7);
+
+        // Get or create quota
+        let quota = await UsageQuota.findOne({ userId: user._id, month: currentMonth });
+
+        if (!quota) {
+          const tierLimits = TIER_LIMITS[userTier];
+          const nextMonth = new Date();
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          nextMonth.setDate(1);
+          nextMonth.setHours(0, 0, 0, 0);
+
+          const quotaData = {
+            userId: user._id,
+            month: currentMonth,
+            tier: userTier,
+            resetDate: nextMonth
+          };
+
+          Object.keys(tierLimits).forEach(feature => {
+            quotaData[feature] = {
+              used: 0,
+              limit: tierLimits[feature]
+            };
+          });
+
+          quota = await UsageQuota.create(quotaData);
+        }
+
+        const videoQuota = quota.intelligentInterviewVideo;
+
+        // Check if feature is available (limit !== 0)
+        if (videoQuota.limit === 0) {
+          console.log(`🚫 Video interview blocked: ${user.email} (${userTier}) - feature not available (limit: 0)`);
+          return res.status(403).json({
+            success: false,
+            error: 'Feature not available',
+            message: `Video interview analysis is not available in your ${userTier} plan. Upgrade to Premium or Pro to unlock this feature.`,
+            upgradeRequired: userTier === 'free' ? 'premium' : 'pro',
+            feature: 'intelligentInterviewVideo'
+          });
+        }
+
+        // Check if limit reached (only if not unlimited)
+        if (videoQuota.limit !== -1 && videoQuota.used >= videoQuota.limit) {
+          console.log(`⚠️ Video interview limit exceeded: ${user.email} (${userTier}) - ${videoQuota.used}/${videoQuota.limit}`);
+          return res.status(429).json({
+            success: false,
+            error: 'Usage limit exceeded',
+            message: `You've reached your monthly limit for video interview analysis (${videoQuota.limit} per month)`,
+            limit: videoQuota.limit,
+            used: videoQuota.used,
+            resetDate: quota.resetDate,
+            upgradeRequired: userTier === 'premium' ? 'pro' : 'premium',
+            feature: 'intelligentInterviewVideo'
+          });
+        }
+
+        console.log(`✅ Video interview quota check passed: ${user.email} (${userTier}) - ${videoQuota.used + 1}/${videoQuota.limit === -1 ? 'unlimited' : videoQuota.limit}`);
+      } else {
+        console.log(`🔓 Admin bypass: ${user.email} - unlimited access`);
+      }
     }
 
     const domain = getDomainById(domainId);

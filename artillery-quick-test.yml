@@ -1,0 +1,43 @@
+# Quick Artillery Test - for rapid testing during development
+# Run with: npx artillery run artillery-quick-test.yml
+
+config:
+  target: "http://localhost:5000"
+  phases:
+    - duration: 30
+      arrivalRate: 10
+      name: "Quick test (10 users/sec for 30s)"
+
+  plugins:
+    metrics-by-endpoint: {}
+
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Quick API Test"
+    flow:
+      # Health check
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+
+      # Jobs search
+      - get:
+          url: "/api/jobs/search?query=developer"
+          expect:
+            - statusCode: 200
+
+      # Scholarships
+      - get:
+          url: "/api/scholarships"
+          expect:
+            - statusCode: 200
+
+      # Internships
+      - get:
+          url: "/api/internships"
+          expect:
+            - statusCode: 200

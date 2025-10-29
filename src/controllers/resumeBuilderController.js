@@ -54,7 +54,7 @@ const generateProfessionalSummary = async (req, res) => {
     };
 
     // Create prompt for AI
-    const prompt = `Generate a professional resume summary (3-4 sentences) for this person:
+    const prompt = `Generate a concise professional resume summary for this person (maximum 80-100 words, 3-4 sentences):
 
 Name: ${context.name}
 ${context.title ? `Current Title: ${context.title}` : ''}
@@ -74,12 +74,12 @@ ${context.projects.length > 0 ? `Key Projects:
 ${context.projects.slice(0, 2).map(proj => `- ${proj.name}: ${proj.technologies}`).join('\n')}` : ''}
 
 Write a compelling professional summary that:
-1. Highlights key technical skills and expertise
-2. Showcases career achievements or potential
-3. Aligns with their career goals
+1. Is EXACTLY 3-4 sentences (maximum 100 words)
+2. Highlights key technical skills and expertise
+3. Showcases career achievements or potential
 4. Uses strong, professional language
 5. Is ATS-optimized with relevant keywords
-6. Focuses on value and impact
+6. Fits perfectly in one resume page
 
 Return ONLY the summary text, no extra formatting or quotes.`;
 
@@ -89,8 +89,9 @@ Return ONLY the summary text, no extra formatting or quotes.`;
       summary = await Promise.race([
         vertexAI.generateContent(prompt, 2, {
           temperature: 0.7,
-          maxOutputTokens: 300,
-          topP: 0.9
+          maxOutputTokens: 1024,
+          topP: 0.9,
+          topK: 40
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('AI generation timeout after 20 seconds')), 20000)

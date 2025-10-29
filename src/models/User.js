@@ -17,7 +17,8 @@ const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    maxlength: 100
   },
   picture: {
     type: String,
@@ -31,6 +32,7 @@ const userSchema = new mongoose.Schema({
     title: {
       type: String,
       trim: true,
+      maxlength: 100,
       default: ''
     },
     bio: {
@@ -41,31 +43,37 @@ const userSchema = new mongoose.Schema({
     location: {
       type: String,
       trim: true,
+      maxlength: 100,
       default: ''
     },
     website: {
       type: String,
       trim: true,
+      maxlength: 200,
       default: ''
     },
     linkedin: {
       type: String,
       trim: true,
+      maxlength: 200,
       default: ''
     },
     github: {
       type: String,
       trim: true,
+      maxlength: 200,
       default: ''
     },
     phone: {
       type: String,
       trim: true,
+      maxlength: 20,
       default: ''
     },
     education: {
       type: String,
       trim: true,
+      maxlength: 150,
       default: ''
     },
     interests: [{
@@ -76,6 +84,7 @@ const userSchema = new mongoose.Schema({
     careerGoal: {
       type: String,
       trim: true,
+      maxlength: 300,
       default: ''
     }
   },
@@ -193,10 +202,31 @@ const userSchema = new mongoose.Schema({
   subscription: {
     plan: {
       type: String,
-      enum: ['free', 'premium', 'enterprise'],
+      enum: ['free', 'student', 'premium', 'pro', 'enterprise'],
       default: 'free'
     },
+    status: {
+      type: String,
+      enum: ['active', 'canceled', 'past_due', 'trialing'],
+      default: 'active'
+    },
+    subscriptionId: {
+      type: String,
+      default: null
+    },
+    customerId: {
+      type: String,
+      default: null
+    },
     validUntil: {
+      type: Date,
+      default: null
+    },
+    startDate: {
+      type: Date,
+      default: null
+    },
+    canceledAt: {
       type: Date,
       default: null
     },

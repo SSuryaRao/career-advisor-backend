@@ -55,6 +55,10 @@ class RecommendationController {
         });
       }
 
+      // Increment usage BEFORE sending response
+      const { incrementUsageForRequest } = require('../middleware/usageLimits');
+      await incrementUsageForRequest(req);
+
       res.status(200).json({
         success: true,
         data: {

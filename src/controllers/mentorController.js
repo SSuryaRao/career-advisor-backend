@@ -52,6 +52,10 @@ exports.sendMessage = async (req, res) => {
       language
     );
 
+    // Increment usage BEFORE sending response
+    const { incrementUsageForRequest } = require('../middleware/usageLimits');
+    await incrementUsageForRequest(req);
+
     res.json({
       success: true,
       data: {
@@ -257,6 +261,10 @@ Format as JSON with this structure:
         }
       }
     );
+
+    // Increment usage BEFORE sending response
+    const { incrementUsageForRequest } = require('../middleware/usageLimits');
+    await incrementUsageForRequest(req);
 
     res.json({
       success: true,

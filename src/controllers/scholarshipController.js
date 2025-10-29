@@ -13,13 +13,19 @@ exports.getAllScholarships = async (req, res) => {
       domain,
       trending,
       limit = 100,
-      page = 1
+      page = 1,
+      excludeCategory,  // New parameter to exclude a category
+      sortBy = 'deadline'  // Default sort by deadline
     } = req.query;
 
     // Build filter
     const filter = { active: true };
 
-    if (category && category !== 'all') {
+    // Priority: excludeCategory takes precedence over category
+    if (excludeCategory) {
+      // Support excluding a category (e.g., exclude 'Internship' when fetching scholarships)
+      filter.category = { $ne: excludeCategory };
+    } else if (category && category !== 'all') {
       filter.category = category;
     }
 
@@ -34,9 +40,39 @@ exports.getAllScholarships = async (req, res) => {
     // Calculate pagination
     const skip = (page - 1) * parseInt(limit);
 
+    // Build sort object
+    let sortObject = {};
+    switch (sortBy) {
+      case 'deadline':
+        sortObject = { trending: -1, deadline: 1, createdAt: -1 };
+        break;
+      case 'amount':
+        // Amount is a string, so we'll sort by trending first, then createdAt
+        // Ideally, amount should be a number in the DB
+        sortObject = { trending: -1, createdAt: -1 };
+        break;
+      case 'trending':
+        sortObject = { trending: -1, createdAt: -1 };
+        break;
+      case 'recent':
+        sortObject = { createdAt: -1 };
+        break;
+      default:
+        sortObject = { trending: -1, deadline: 1, createdAt: -1 };
+    }
+
+    console.log('📊 Scholarship Query:', {
+      filter: JSON.stringify(filter),
+      sortBy,
+      sortObject,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      skip
+    });
+
     // Get scholarships
     const scholarships = await Scholarship.find(filter)
-      .sort({ trending: -1, deadline: 1, createdAt: -1 })
+      .sort(sortObject)
       .skip(skip)
       .limit(parseInt(limit));
 

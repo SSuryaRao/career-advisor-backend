@@ -27,6 +27,8 @@ const scholarshipRoutes = require('./routes/scholarshipRoutes');
 const internshipRoutes = require('./routes/internshipRoutes');
 const testRoutes = require('./routes/testRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const quotaRoutes = require('./routes/quotaRoutes');
 const { startJobSync } = require('./services/jobSyncService');
 const { localCleanupService } = require('./services/localStorageCleanup');
 const dataSyncService = require('./services/dataSyncService');
@@ -90,6 +92,8 @@ app.use('/api/scholarships', scholarshipRoutes);
 app.use('/api/internships', internshipRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/quota', quotaRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({

@@ -20,7 +20,10 @@ const roadmapProgressSchema = new mongoose.Schema({
     completedAt: {
       type: Date,
       default: Date.now
-    }
+    },
+    completedSubtasks: [{
+      type: String
+    }]
   }],
   roadmapData: {
     type: mongoose.Schema.Types.Mixed,
