@@ -23,7 +23,7 @@ const TIER_LIMITS = {
     resumeBuilder: 10,
     mockInterview: 25,
     intelligentInterviewStandard: 5,
-    intelligentInterviewVideo: 0, // Not available in Student plan
+    intelligentInterviewVideo: 1, // 1 video interview (3 min) per month
     aiMentorMessages: 100,
     learningPaths: 3,
     jobRecommendations: 20,
@@ -84,8 +84,17 @@ const HOURLY_LIMITS = {
   intelligentInterviewVideo: 1 // Max 1 video interview per hour
 };
 
+// Video interview duration limits by tier (in seconds)
+const VIDEO_DURATION_LIMITS = {
+  free: 0,        // No video interviews
+  student: 180,   // 3 minutes (cost-optimized)
+  premium: 300,   // 5 minutes
+  pro: 600        // 10 minutes
+};
+
 module.exports = {
   TIER_LIMITS,
   DAILY_LIMITS,
-  HOURLY_LIMITS
+  HOURLY_LIMITS,
+  VIDEO_DURATION_LIMITS
 };

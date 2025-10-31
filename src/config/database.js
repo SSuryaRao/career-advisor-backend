@@ -9,10 +9,10 @@ const connectDB = async () => {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      // Performance optimization settings
-      serverSelectionTimeoutMS: 5000, // Timeout for initial server selection (5 seconds)
+      // Performance optimization settings for Cloud Run
+      serverSelectionTimeoutMS: 30000, // Timeout for initial server selection (30 seconds) - increased for Cloud Run cold starts
       socketTimeoutMS: 45000, // Timeout for socket inactivity (45 seconds)
-      connectTimeoutMS: 10000, // Timeout for initial connection (10 seconds)
+      connectTimeoutMS: 30000, // Timeout for initial connection (30 seconds) - increased for Cloud Run
       maxPoolSize: 10, // Maximum number of connections in the pool
       minPoolSize: 2, // Minimum number of connections to maintain
       maxIdleTimeMS: 30000, // Close connections idle for more than 30 seconds

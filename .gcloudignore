@@ -1,0 +1,48 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+# using gcloud. It follows the same syntax as .gitignore, with the addition of
+# "#!include" directives (which insert the entries of the given .gitignore-style
+# file at that point).
+
+# Standard ignore patterns
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Environment files (should use app.yaml env_variables instead)
+.env
+.env.*
+
+# Credentials (configured via environment variables in app.yaml)
+credentials/
+*.json
+!package.json
+!package-lock.json
+
+# Development files
+*.log
+.git
+.gitignore
+.DS_Store
+coverage/
+.nyc_output/
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
+
+# Development tools
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+dist/
+build/
+
+# Documentation
+README.md
+docs/

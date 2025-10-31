@@ -5,6 +5,35 @@ instance_class: F2
 env_variables:
   NODE_ENV: "production"
 
+  # Google Cloud Configuration
+  GOOGLE_CLOUD_PROJECT_ID: "careercraftai-475216"
+
+  # Document AI Configuration
+  DOCUMENT_AI_PROCESSOR_ID: "69cd65f133ed1456"
+  DOCUMENT_AI_LOCATION: "us"
+
+  # Vertex AI Configuration
+  VERTEX_AI_LOCATION: "us-central1"
+  VERTEX_AI_MODEL: "gemini-2.5-pro"
+
+  # Cloud Storage Configuration
+  GCS_BUCKET_NAME: "career-advisor-interview-temp"
+
+  # Dialogflow CX Configuration
+  DIALOGFLOW_PROJECT_ID: "careercraftai-475216"
+  DIALOGFLOW_AGENT_ID: "6a0599aa-7167-4535-aac5-c77b5817c04b"
+  DIALOGFLOW_LOCATION: "us-central1"
+
+  # IMPORTANT: In App Engine, GOOGLE_APPLICATION_CREDENTIALS is automatically set
+  # by the platform when deployed. The service account attached to the App Engine
+  # instance will be used for authentication. You don't need to set it manually.
+  #
+  # The app.yaml deployment uses the default App Engine service account which has
+  # the necessary permissions for Document AI, Vertex AI, and other GCP services.
+  #
+  # If you need to use a specific service account, attach it during deployment:
+  # gcloud app deploy --service-account=careercraft-ai@careercraftai-475216.iam.gserviceaccount.com
+
 automatic_scaling:
   min_instances: 1
   max_instances: 10

@@ -186,7 +186,7 @@ class VideoIntelligenceService {
   }
 
   /**
-   * Generate body language insights
+   * Generate body language insights with improved scoring
    */
   generateBodyLanguageInsights(analysisResult) {
     const insights = {
@@ -194,62 +194,83 @@ class VideoIntelligenceService {
       bodyMovement: 'Not Available',
       overallPresence: 'Not Available',
       confidence: 0,
+      numericScore: 0, // Add numeric score for consistency
       recommendations: []
     };
 
     const { personDetection, faceDetection } = analysisResult;
 
-    // Eye contact assessment (based on face detection)
+    let eyeContactScore = 0;
+    let bodyMovementScore = 0;
+
+    // Eye contact assessment (based on face detection) - 60% weight
     if (faceDetection.detected) {
       const faceConfidence = faceDetection.avgConfidence;
 
       if (faceConfidence > 0.8) {
         insights.eyeContact = 'Excellent';
+        eyeContactScore = 100;
         insights.recommendations.push('Great eye contact maintained throughout');
       } else if (faceConfidence > 0.6) {
         insights.eyeContact = 'Good';
+        eyeContactScore = 80;
         insights.recommendations.push('Good eye contact, try to maintain it more consistently');
       } else if (faceConfidence > 0.4) {
         insights.eyeContact = 'Fair';
+        eyeContactScore = 60;
         insights.recommendations.push('Work on maintaining better eye contact with the camera');
       } else {
         insights.eyeContact = 'Needs Improvement';
+        eyeContactScore = 40;
         insights.recommendations.push('Try to look at the camera more frequently to simulate eye contact');
       }
 
       insights.confidence = faceConfidence;
     }
 
-    // Body movement assessment
+    // Body movement assessment - 40% weight
     if (personDetection.detected && personDetection.totalTracks > 0) {
       const trackVariance = personDetection.tracks.length;
+      const avgConfidence = personDetection.confidence;
 
       if (trackVariance > 5) {
         insights.bodyMovement = 'Very Active';
+        bodyMovementScore = 60; // Penalize excessive movement
         insights.recommendations.push('Consider reducing excessive movement for a more professional appearance');
       } else if (trackVariance > 2) {
         insights.bodyMovement = 'Moderate';
+        bodyMovementScore = 90; // Ideal range
         insights.recommendations.push('Good balance of movement and stillness');
       } else {
         insights.bodyMovement = 'Minimal';
+        bodyMovementScore = 70; // Acceptable but could be more engaging
         insights.recommendations.push('Use natural hand gestures to emphasize key points');
       }
+
+      // Adjust based on detection confidence
+      bodyMovementScore = bodyMovementScore * avgConfidence;
     }
 
-    // Overall presence
-    const overallScore = (faceDetection.avgConfidence || 0 + personDetection.confidence || 0) / 2;
+    // Calculate numeric score (0-100 scale)
+    const numericScore = Math.round((eyeContactScore * 0.6) + (bodyMovementScore * 0.4));
+    insights.numericScore = numericScore;
 
-    if (overallScore > 0.75) {
+    // Overall presence based on numeric score
+    if (numericScore > 85) {
       insights.overallPresence = 'Strong';
-    } else if (overallScore > 0.5) {
+    } else if (numericScore > 70) {
       insights.overallPresence = 'Good';
-    } else if (overallScore > 0.3) {
+    } else if (numericScore > 50) {
       insights.overallPresence = 'Fair';
     } else {
       insights.overallPresence = 'Needs Improvement';
     }
 
-    insights.confidence = overallScore;
+    // Overall confidence remains the average
+    const overallConfidence = ((faceDetection.avgConfidence || 0) + (personDetection.confidence || 0)) / 2;
+    insights.confidence = overallConfidence;
+
+    console.log(`📊 Body Language Score: ${numericScore}/100 (Eye Contact: ${eyeContactScore}, Movement: ${bodyMovementScore})`);
 
     return insights;
   }

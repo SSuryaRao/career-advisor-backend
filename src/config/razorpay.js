@@ -10,8 +10,8 @@ const razorpay = new Razorpay({
 // Go to: https://dashboard.razorpay.com/app/subscriptions/plans
 const SUBSCRIPTION_PLANS = {
   // Student plans
-  student_monthly: process.env.ROZORPAY_PLAN_STUDENT_MONTHLY || 'plan_RXzj8IiNHgF2Ae',
-  student_yearly: process.env.ROZORPAY_PLAN_STUDENT_YEARLY || 'plan_RXzgch0Sdne1l4',
+  student_monthly: process.env.ROZORPAY_PLAN_STUDENT_MONTHLY || 'plan_Ra7vs0nuA5ulHl',
+  student_yearly: process.env.ROZORPAY_PLAN_STUDENT_YEARLY || 'plan_Ra7yS90igGECvz',
 
   // Premium plans
   premium_monthly: process.env.RAZORPAY_PLAN_PREMIUM_MONTHLY || 'plan_RXzlMYb1U0bcte',
@@ -26,7 +26,7 @@ const SUBSCRIPTION_PLANS = {
 const PLAN_DETAILS = {
   student_monthly: {
     name: 'Student Monthly',
-    amount: 19900, // in paise (₹199.00)
+    amount: 39900, // in paise (₹399.00)
     currency: 'INR',
     interval: 1,
     period: 'monthly',
@@ -34,7 +34,7 @@ const PLAN_DETAILS = {
   },
   student_yearly: {
     name: 'Student Yearly',
-    amount: 199900, // in paise (₹1,999.00)
+    amount: 399900, // in paise (₹3,999.00)
     currency: 'INR',
     interval: 12,
     period: 'yearly',

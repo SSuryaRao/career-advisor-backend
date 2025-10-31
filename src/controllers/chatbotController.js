@@ -4,25 +4,42 @@ const User = require('../models/User');
 
 class ChatbotController {
   constructor() {
-    // Initialize Dialogflow CX client
-    this.isConfigured = !!(
+    // Check if Dialogflow configuration is available
+    const hasRequiredConfig = !!(
       process.env.DIALOGFLOW_PROJECT_ID &&
-      process.env.DIALOGFLOW_AGENT_ID &&
-      process.env.GOOGLE_APPLICATION_CREDENTIALS
+      process.env.DIALOGFLOW_AGENT_ID
     );
 
-    if (this.isConfigured) {
-      this.location = process.env.DIALOGFLOW_LOCATION || 'us-central1';
+    this.isConfigured = false;
 
-      this.sessionsClient = new SessionsClient({
-        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-        apiEndpoint: `${this.location}-dialogflow.googleapis.com`
-      });
+    if (hasRequiredConfig) {
+      try {
+        this.location = process.env.DIALOGFLOW_LOCATION || 'us-central1';
+        const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
-      this.projectId = process.env.DIALOGFLOW_PROJECT_ID;
-      this.agentId = process.env.DIALOGFLOW_AGENT_ID;
-      console.log('✅ Dialogflow CX initialized successfully');
-      console.log(`📍 Using regional endpoint: ${this.location}-dialogflow.googleapis.com`);
+        // Initialize with appropriate credentials
+        if (credentials) {
+          // Local development with explicit service account key
+          this.sessionsClient = new SessionsClient({
+            keyFilename: credentials,
+            apiEndpoint: `${this.location}-dialogflow.googleapis.com`
+          });
+        } else {
+          // Production: Use Application Default Credentials
+          this.sessionsClient = new SessionsClient({
+            apiEndpoint: `${this.location}-dialogflow.googleapis.com`
+          });
+        }
+
+        this.projectId = process.env.DIALOGFLOW_PROJECT_ID;
+        this.agentId = process.env.DIALOGFLOW_AGENT_ID;
+        this.isConfigured = true;
+        console.log('✅ Dialogflow CX initialized successfully');
+        console.log(`📍 Using regional endpoint: ${this.location}-dialogflow.googleapis.com`);
+      } catch (error) {
+        console.error('❌ Failed to initialize Dialogflow CX:', error.message);
+        this.isConfigured = false;
+      }
     } else {
       console.warn('⚠️ Dialogflow CX not configured - using fallback mode');
     }

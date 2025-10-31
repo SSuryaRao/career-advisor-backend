@@ -165,6 +165,9 @@ class InterviewAnalysisService {
         videoAnalysis
       });
 
+      // Evaluate transcription quality and add warnings if needed
+      const transcriptionQuality = this.evaluateTranscriptionQuality(transcriptionResult);
+
       console.log('✅ Advanced analysis complete');
 
       return {
@@ -198,6 +201,7 @@ class InterviewAnalysisService {
           wordCount: transcriptionResult?.wordCount || 0,
           duration: parseFloat(transcriptionResult?.duration) || 0
         },
+        transcriptionQuality: transcriptionQuality, // Add quality assessment
         overallAssessment: structuredAnalysis.overall,
         timestamp: new Date().toISOString()
       };
@@ -468,9 +472,12 @@ A concise 2-3 sentence overall assessment integrating content, delivery, and pre
       breakdown.delivery = Math.max(0, Math.min(100, deliveryScore));
     }
 
-    // Calculate body language score
+    // Calculate body language score using numeric score if available
     if (videoAnalysis) {
-      const bodyLanguageScore = (videoAnalysis.bodyLanguageInsights.confidence || 0) * 100;
+      // Use the new numericScore if available, fallback to old confidence-based calculation
+      const bodyLanguageScore = videoAnalysis.bodyLanguageInsights.numericScore !== undefined
+        ? videoAnalysis.bodyLanguageInsights.numericScore
+        : (videoAnalysis.bodyLanguageInsights.confidence || 0) * 100;
       breakdown.bodyLanguage = Math.max(0, Math.min(100, bodyLanguageScore));
     }
 
@@ -484,6 +491,74 @@ A concise 2-3 sentence overall assessment integrating content, delivery, and pre
     return {
       total: Math.max(0, Math.min(100, total)),
       breakdown
+    };
+  }
+
+  /**
+   * Evaluate transcription quality and generate warnings
+   */
+  evaluateTranscriptionQuality(transcriptionResult) {
+    if (!transcriptionResult) {
+      return {
+        warning: true,
+        level: 'error',
+        message: 'Transcription failed completely',
+        suggestions: ['Please try recording again', 'Ensure microphone is working']
+      };
+    }
+
+    const confidence = transcriptionResult.confidence || 0;
+    const wordCount = transcriptionResult.wordCount || 0;
+
+    // Critical: Very low confidence
+    if (confidence < 0.7) {
+      return {
+        warning: true,
+        level: 'critical',
+        message: 'Audio quality was poor. The transcription may be inaccurate.',
+        suggestions: [
+          'Use a quiet environment without background noise',
+          'Speak clearly and at a normal pace',
+          'Check that your microphone is working properly',
+          'Consider re-recording for better analysis'
+        ]
+      };
+    }
+
+    // Warning: Moderate confidence
+    if (confidence < 0.85) {
+      return {
+        warning: true,
+        level: 'warning',
+        message: 'Audio quality could be improved for better accuracy.',
+        suggestions: [
+          'Try to minimize background noise',
+          'Speak clearly towards the microphone',
+          'Maintain consistent volume throughout'
+        ]
+      };
+    }
+
+    // Warning: Very short response
+    if (wordCount < 20) {
+      return {
+        warning: true,
+        level: 'info',
+        message: 'Your response was quite brief. Longer responses provide better analysis.',
+        suggestions: [
+          'Try to provide more detailed explanations',
+          'Include examples or context to support your answer',
+          'Aim for 30-50 words minimum for better feedback'
+        ]
+      };
+    }
+
+    // All good!
+    return {
+      warning: false,
+      level: 'success',
+      message: 'Excellent audio quality. Transcription is highly accurate.',
+      suggestions: []
     };
   }
 

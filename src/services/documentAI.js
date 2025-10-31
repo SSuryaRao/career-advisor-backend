@@ -25,11 +25,21 @@ class DocumentAIService {
       // Initialize the Document AI client
       const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
+      // Initialize with appropriate credentials
+      // - In production (App Engine/Cloud Run): Uses Application Default Credentials (ADC)
+      // - In development: Uses keyFilename if GOOGLE_APPLICATION_CREDENTIALS is set
       if (credentials) {
+        // Local development with explicit service account key
         this.client = new DocumentProcessorServiceClient({
           keyFilename: credentials
         });
-        console.log('✅ Document AI client initialized successfully');
+        console.log('✅ Document AI client initialized with service account key');
+        this.isConfigured = true;
+      } else if (process.env.NODE_ENV === 'production') {
+        // Production: Use Application Default Credentials
+        // App Engine automatically provides credentials via the attached service account
+        this.client = new DocumentProcessorServiceClient();
+        console.log('✅ Document AI client initialized with Application Default Credentials');
         this.isConfigured = true;
       } else {
         console.warn('⚠️ GOOGLE_APPLICATION_CREDENTIALS not set. Document AI will be disabled.');

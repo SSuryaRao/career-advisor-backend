@@ -1,0 +1,49 @@
+# Database Configuration
+MONGODB_URI: "mongodb://career_advisor:career1234@ac-7qcy7ng-shard-00-00.qns9uj3.mongodb.net:27017,ac-7qcy7ng-shard-00-01.qns9uj3.mongodb.net:27017,ac-7qcy7ng-shard-00-02.qns9uj3.mongodb.net:27017/career-advisor?ssl=true&replicaSet=atlas-ndrq0z-shard-0&authSource=admin&retryWrites=true&w=majority&appName=Cluster0"
+
+# Server Configuration
+NODE_ENV: "production"
+
+# API Configuration
+REMOTEOK_API_URL: "https://remoteok.io/api"
+
+# Security
+JWT_SECRET: "2f3f61c8aae84548b15551db5943fc40"
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS: "900000"
+RATE_LIMIT_MAX_REQUESTS: "100"
+
+# Gemini AI Configuration
+GEMINI_API_KEY: "AIzaSyC4x3pHhOlAqWdxNuOk-nbdiZQ3OrOWVK0"
+
+# Firebase Configuration
+FIREBASE_PROJECT_ID: "career-advisor-6d3b0"
+FIREBASE_STORAGE_BUCKET: "career-advisor-6d3b0.firebasestorage.app"
+
+# Google Cloud Configuration
+GOOGLE_CLOUD_PROJECT_ID: "careercraftai-475216"
+DOCUMENT_AI_PROCESSOR_ID: "69cd65f133ed1456"
+DOCUMENT_AI_LOCATION: "us"
+# Note: GOOGLE_APPLICATION_CREDENTIALS not needed - Cloud Run uses default service account
+
+# Google Cloud Vertex AI Configuration
+VERTEX_AI_LOCATION: "us-central1"
+VERTEX_AI_MODEL: "gemini-2.5-pro"
+
+# Google Cloud Storage Configuration
+GCS_BUCKET_NAME: "career-advisor-interview-temp"
+
+# Dialogflow CX Configuration
+DIALOGFLOW_PROJECT_ID: "careercraftai-475216"
+DIALOGFLOW_AGENT_ID: "6a0599aa-7167-4535-aac5-c77b5817c04b"
+DIALOGFLOW_LOCATION: "us-central1"
+
+# Razorpay Payment Gateway Configuration (TEST MODE)
+RAZORPAY_KEY_ID: "rzp_test_RXkReSt37EEzAu"
+RAZORPAY_KEY_SECRET: "NOfbZgZX3gAyNrgfxuxuQSik"
+RAZORPAY_WEBHOOK_SECRET: ""
+RAZORPAY_PLAN_PREMIUM_MONTHLY: "plan_RXkwOx0jC8sG1n"
+RAZORPAY_PLAN_PREMIUM_YEARLY: "plan_RXkxwl3hfi25Gk"
+RAZORPAY_PLAN_PRO_MONTHLY: "plan_RXkyysT7bTWikC"
+RAZORPAY_PLAN_PRO_YEARLY: "plan_RXkzvKBUZuGcCw"
